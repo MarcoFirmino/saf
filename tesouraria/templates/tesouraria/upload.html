@@ -1,0 +1,67 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Tesouraria | Conversor PRN{% endblock %}
+
+{% block extra_css %}
+    <link rel="stylesheet" href="{% static 'tesouraria/css/style_tesouraria.css' %}">
+{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-6 col-lg-5">
+        <div class="card shadow-sm mt-4 border-0">
+            <div class="card-header bg-primary text-white py-3">
+                <h5 class="mb-0 d-flex align-items-center">
+                    <i class="bi bi-file-earmark-binary me-2"></i> 
+                    Conversor de Fluxo Excel para PRN
+                </h5>
+            </div>
+            <div class="card-body p-4">
+                <p class="text-muted small mb-4">
+                    Selecione o arquivo Excel e informe o nome exato da aba (planilha) para realizar a conversão unpivot no padrão de 78 caracteres.
+                </p>
+
+                <form id="formConverter" method="post" enctype="multipart/form-data">
+                    {% csrf_token %}
+                    
+                    <div class="mb-3">
+                    <label for="arquivo_excel" class="form-label fw-bold small text-secondary">Arquivo Excel (.xlsx, .xlsm, .xls)</label>
+                    <input type="file" 
+                        name="arquivo_excel" 
+                        id="arquivo_excel" 
+                        class="form-control" 
+                        accept=".xlsx, .xlsm, .xls"  required>
+                    </div>
+
+                    <div class="mb-4">
+                        <label for="nome_aba" class="form-label fw-bold small text-secondary">Nome da Aba (Exatamente como no Excel)</label>
+                        <div class="input-group">
+                            <span class="input-group-text bg-light"><i class="bi bi-layers"></i></span>
+                            <input type="text" name="nome_aba" id="nome_aba" class="form-control" value="Fluxo" placeholder="Ex: Planilha1" required>
+                        </div>
+                    </div>
+
+                    <div class="d-grid">
+                        <button type="submit" class="btn btn-primary" id="btnProcessar">
+                            <i class="bi bi-gear-wide-connected me-1"></i> Processar e Baixar PRN
+                        </button>
+                        
+                        <button class="btn btn-primary d-none" type="button" id="btnLoading" disabled>
+                            <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                            Processando...
+                        </button>
+                    </div>
+                </form>
+            </div>
+            <div class="card-footer bg-light py-2 text-center">
+                <small class="text-muted fst-italic">Utilitário exclusivo - Protege Tesouraria</small>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+    <script src="{% static 'tesouraria/js/main_tesouraria.js' %}"></script>
+{% endblock %}

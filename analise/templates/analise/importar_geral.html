@@ -1,0 +1,93 @@
+{% extends 'base.html' %}
+
+{% block title %}Processamento Geral | Protege{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8">
+        
+        {% if messages %}
+            {% for message in messages %}
+                <div class="alert alert-{{ message.tags }} alert-dismissible fade show shadow-sm mb-4">
+                    {{ message }}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+            {% endfor %}
+        {% endif %}
+
+        <div class="card shadow border-0 mb-4">
+            <div class="card-header bg-secondary text-white py-3">
+                <h5 class="mb-0"><i class="bi bi-database-add"></i> Passo 1: Atualizar Base Bruta</h5>
+            </div>
+            <div class="card-body p-4">
+                <form method="post" enctype="multipart/form-data">
+                    {% csrf_token %}
+                    <div class="row align-items-end">
+                        <div class="col-md-9">
+                            <label class="form-label text-muted">Arquivo Geral (.xlsx)</label>
+                            <input type="file" name="arquivo_geral" class="form-control" required accept=".xlsx, .xls">
+                        </div>
+                        <div class="col-md-3">
+                            <button type="submit" class="btn btn-secondary w-100">
+                                <i class="bi bi-upload"></i> Importar
+                            </button>
+                        </div>
+                    </div>
+                    <div class="form-text mt-2">Isso apagará a base antiga e salvará a nova.</div>
+                </form>
+            </div>
+            <div class="card-footer bg-light text-muted">
+                <div class="d-flex justify-content-between align-items-center">
+                    <small>
+                        <i class="bi bi-hdd-stack me-1"></i> 
+                        Registros na base: <strong>{{ qtd_registros }}</strong>
+                    </small>
+                    
+                    <small>
+                        {% if ultima_atualizacao %}
+                            <i class="bi bi-clock-history me-1"></i> 
+                            Última importação: <strong>{{ ultima_atualizacao|date:"d/m/Y H:i" }}</strong>
+                        {% else %}
+                            <span class="text-danger"><i class="bi bi-exclamation-circle"></i> Base Vazia</span>
+                        {% endif %}
+                    </small>
+                </div>
+            </div>
+        </div>
+
+        <div class="card shadow border-0 border-top border-4 border-primary">
+            <div class="card-header bg-white py-3">
+                <h4 class="mb-0 text-primary fw-bold"><i class="bi bi-sliders"></i> Passo 2: Gerar Relatório</h4>
+            </div>
+            <div class="card-body p-4">
+                
+                <form method="post" action="{% url 'processar_relatorio' %}">
+                    {% csrf_token %}
+                    
+                    <div class="row mb-4">
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold">Data de Corte (Filtro)</label>
+                            <input type="date" name="data_corte" class="form-control form-control-lg" required>
+                            <div class="form-text">Registros posteriores a esta data serão ignorados.</div>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold">Data Base (Cálculo Atraso)</label>
+                            <input type="date" name="data_correcao" class="form-control form-control-lg" required>
+                            <div class="form-text">Data usada para calcular "Dias em Atraso".</div>
+                        </div>
+                    </div>
+
+                    <div class="d-grid">
+                        <button type="submit" class="btn btn-primary btn-lg">
+                            <i class="bi bi-file-earmark-excel-fill me-2"></i> Processar e Baixar Excel
+                        </button>
+                    </div>
+                    
+                </form>
+
+            </div>
+        </div>
+
+    </div>
+</div>
+{% endblock %}

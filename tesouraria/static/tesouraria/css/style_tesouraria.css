@@ -1,0 +1,24 @@
+:root {
+    --cor-primaria: #004a8d; /* Exemplo de azul Protege */
+}
+
+body {
+    background-color: #f8f9fa;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+.navbar-brand {
+    letter-spacing: 1px;
+}
+
+/* Customização para o selo da Tesouraria */
+.text-info {
+    font-weight: 500;
+}
+
+.dropdown-item i {
+    margin-right: 8px;
+    color: var(--cor-primaria);
+}

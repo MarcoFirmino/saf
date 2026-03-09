@@ -1,0 +1,81 @@
+{% extends 'base.html' %}
+
+{% block title %}Importar Bd Clientes | Protege{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8">
+        
+        <div class="card shadow border-0">
+            <div class="card-header bg-primary text-white py-3">
+                <h4 class="mb-0 fs-5"><i class="bi bi-people-fill me-2"></i> Importar Base de Clientes</h4>
+            </div>
+            
+            <div class="card-body p-4">
+                
+                {% if messages %}
+                    {% for message in messages %}
+                        <div class="alert alert-{{ message.tags }} alert-dismissible fade show shadow-sm border-0 mb-4">
+                            {% if message.tags == 'success' %}<i class="bi bi-check-circle-fill me-2"></i>{% endif %}
+                            {% if message.tags == 'error' %}<i class="bi bi-exclamation-triangle-fill me-2"></i>{% endif %}
+                            {% if message.tags == 'warning' %}<i class="bi bi-exclamation-circle-fill me-2"></i>{% endif %}
+                            {{ message }}
+                            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                        </div>
+                    {% endfor %}
+                {% endif %}
+
+                <p class="text-muted mb-4">
+                    Faça o upload da planilha atualizada do <strong>Banco de Dados de Clientes</strong> para substituir a base atual.
+                </p>
+                
+                <div class="card bg-light border-0 mb-4">
+                    <div class="card-body">
+                        <h6 class="fw-bold text-secondary mb-3 small text-uppercase">
+                            <i class="bi bi-table"></i> Colunas Obrigatórias no Excel
+                        </h6>
+                        <div class="d-flex flex-wrap gap-2">
+                            <span class="badge bg-white text-dark border shadow-sm">CNPJ Raiz</span>
+                            <span class="badge bg-white text-dark border shadow-sm">Razão Social</span>
+                            <span class="badge bg-white text-dark border shadow-sm">Perfil</span>
+                            <span class="badge bg-white text-dark border shadow-sm">Negócio</span>
+                            <span class="badge bg-white text-dark border shadow-sm">chave</span>
+                            <span class="badge bg-white text-dark border shadow-sm">Executivo</span>
+                            <span class="badge bg-white text-dark border shadow-sm">Responsável Financeiro</span>
+                            <span class="badge bg-white text-dark border shadow-sm">Grupo Ponto</span>
+                            <span class="badge bg-white text-dark border shadow-sm">Status</span>
+                        </div>
+                    </div>
+                </div>
+
+                <form method="post" enctype="multipart/form-data">
+                    {% csrf_token %}
+                    
+                    <div class="mb-4">
+                        <label class="form-label fw-bold">Selecione o arquivo (.xlsx, .csv)</label>
+                        <input type="file" name="arquivo_clientes" class="form-control form-control-lg" required accept=".xlsx, .xls, .csv">
+                    </div>
+
+                    <hr class="my-4">
+
+                    <div class="d-flex justify-content-between align-items-center">
+                        
+                        <a href="{% url 'limpar_bd_clientes' %}" 
+                           class="btn btn-outline-danger" 
+                           onclick="return confirm('⚠️ ATENÇÃO:\n\nTem certeza que deseja apagar TODOS os clientes da base?\nEssa ação não pode ser desfeita.');">
+                            <i class="bi bi-trash"></i> Limpar Base Atual
+                        </a>
+
+                        <button type="submit" class="btn btn-success px-4 fw-bold">
+                            <i class="bi bi-cloud-upload-fill me-2"></i> Importar Clientes
+                        </button>
+                    </div>
+
+                </form>
+
+            </div>
+        </div>
+        
+    </div>
+</div>
+{% endblock %}

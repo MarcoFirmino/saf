@@ -1,0 +1,88 @@
+/* --- Identidade Visual PROTEGE --- */
+:root {
+    --cor-primaria: #004a8f; /* Azul Forte */
+    --cor-secundaria: #ffcd00; /* Amarelo Ouro */
+    --fundo-pagina: #e9ecef;
+}
+
+body { 
+    background-color: var(--fundo-pagina); 
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+/* Barra de Navegação */
+.navbar {
+    background-color: var(--cor-primaria) !important;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+}
+
+.navbar-brand {
+    font-weight: bold;
+    color: var(--cor-secundaria) !important;
+}
+
+/* O Cartão Central */
+.card {
+    border: none;
+    border-top: 5px solid var(--cor-secundaria);
+    border-radius: 10px;
+}
+
+.card-header {
+    background-color: white;
+    color: var(--cor-primaria);
+    font-weight: bold;
+    border-bottom: 1px solid #eee;
+}
+
+/* Botões */
+.btn-protege {
+    background-color: var(--cor-primaria);
+    color: white;
+    font-weight: 600;
+    border: 1px solid var(--cor-primaria);
+}
+
+.btn-protege:hover {
+    background-color: #003366;
+    color: white;
+}
+
+/* Ícones dos inputs */
+.input-group-text {
+    background-color: var(--cor-secundaria);
+    color: var(--cor-primaria);
+    border: none;
+    font-weight: bold;
+}
+/* ... (Mantenha o código anterior da Home aqui) ... */
+
+/* --- Estilos Específicos da Página de Login --- */
+
+/* Usamos esta classe para não afetar o body da página Home */
+.body-login {
+    background-color: var(--cor-primaria); /* Fundo Azul */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100vh; /* Ocupa a altura total da tela */
+    margin: 0;
+}
+
+.card-login {
+    width: 100%;
+    max-width: 400px;
+    border-top: 5px solid var(--cor-secundaria);
+}
+
+.btn-login {
+    background-color: var(--cor-secundaria);
+    color: var(--cor-primaria);
+    font-weight: bold;
+    border: none;
+}
+
+.btn-login:hover {
+    background-color: #e6b800; /* Um amarelo um pouco mais escuro */
+    color: var(--cor-primaria);
+}

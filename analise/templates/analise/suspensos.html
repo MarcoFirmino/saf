@@ -1,0 +1,291 @@
+{% extends 'base.html' %}
+{% block title %}Gestão de Suspensos | Protege{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    
+    {% if messages %}
+        {% for message in messages %}
+            <div class="alert alert-{{ message.tags }} alert-dismissible fade show shadow-sm" role="alert">
+                {% if message.tags == 'success' %}<i class="bi bi-check-circle-fill me-2"></i>{% endif %}
+                {% if message.tags == 'error' %}<i class="bi bi-exclamation-triangle-fill me-2"></i>{% endif %}
+                {{ message }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
+        {% endfor %}
+    {% endif %}
+
+    <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+        <div>
+            <h2 class="mb-0 fw-bold" style="color: var(--cor-primaria);">
+                <i class="bi bi-person-x-fill"></i> Base de Suspensos
+            </h2>
+            <small class="text-muted">Gerencie a base de clientes suspensos e realize a análise automática.</small>
+        </div>
+
+        <div class="d-flex gap-2">
+            <button class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#modalImportar">
+                <i class="bi bi-upload"></i> Importar
+            </button>
+
+            <form method="post" class="d-inline" onsubmit="ativarLoading()">
+                {% csrf_token %}
+                <input type="hidden" name="processar_dados" value="true">
+                <button type="submit" class="btn btn-primary" id="btnProcessar">
+                    <i class="bi bi-gear-wide-connected"></i> Processar Análise
+                </button>
+                <button class="btn btn-primary" type="button" disabled id="btnLoading" style="display: none;">
+                    <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
+                </button>
+            </form>
+
+            <form method="post" class="d-inline">
+                {% csrf_token %}
+                <input type="hidden" name="exportar_excel" value="true">
+                <input type="hidden" name="filtro_cnpj_raiz" value="{{ request.GET.cnpj_raiz }}">
+                <input type="hidden" name="filtro_data" value="{{ request.GET.data_suspensao }}">
+                <input type="hidden" name="filtro_suspenso" value="{{ request.GET.suspenso }}">
+                <input type="hidden" name="filtro_cancelado" value="{{ request.GET.cancelado }}">
+                
+                <button type="submit" class="btn btn-success">
+                    <i class="bi bi-file-earmark-excel"></i> Baixar
+                </button>
+            </form>
+
+            <button class="btn btn-danger" data-bs-toggle="modal" data-bs-target="#modalLimparBanco">
+                <i class="bi bi-trash"></i> Limpar Tudo
+            </button>
+        </div>
+    </div>
+
+    <div class="card shadow-sm mb-4">
+        <div class="card-header bg-light">
+            <i class="bi bi-funnel"></i> Filtros de Pesquisa
+        </div>
+        <div class="card-body py-3">
+                <form method="get" class="row g-2">
+                    <div class="col-md-2">
+                        <label class="form-label text-muted small fw-bold">CNPJ Raiz</label>
+                        <input type="text" name="cnpj_raiz" class="form-control form-control-sm" value="{{ request.GET.cnpj_raiz }}" placeholder="8 dígitos">
+                    </div>
+                    
+                    <div class="col-md-2">
+                        <label class="form-label text-muted small fw-bold">Data Suspensão</label>
+                        <input type="date" name="data_suspensao" class="form-control form-control-sm" value="{{ request.GET.data_suspensao }}">
+                    </div>
+
+                    <div class="col-md-2">
+                        <label class="form-label text-muted small fw-bold">Status Calculado</label>
+                        <select name="status" class="form-select form-select-sm">
+                            <option value="">Todos</option>
+                            <option value="Em Análise" {% if request.GET.status == 'Em Análise' %}selected{% endif %}>Em Análise</option>
+                            <option value="Restabelecer" {% if request.GET.status == 'Restabelecer' %}selected{% endif %}>Restabelecer</option>
+                            <option value="Suspenso" {% if request.GET.status == 'Suspenso' %}selected{% endif %}>Suspenso</option>
+                            <option value="Cancelado" {% if request.GET.status == 'Cancelado' %}selected{% endif %}>Cancelado</option>
+                        </select>
+                    </div>
+
+                    <div class="col-md-2">
+                        <label class="form-label text-muted small fw-bold">Suspenso?</label>
+                        <select name="suspenso" class="form-select form-select-sm">
+                            <option value="">Todos</option>
+                            <option value="Sim" {% if request.GET.suspenso == 'Sim' %}selected{% endif %}>Sim</option>
+                            <option value="Não" {% if request.GET.suspenso == 'Não' %}selected{% endif %}>Não</option>
+                        </select>
+                    </div>
+
+                    <div class="col-md-2">
+                        <label class="form-label text-muted small fw-bold">Cancelado?</label>
+                        <select name="cancelado" class="form-select form-select-sm">
+                            <option value="">Todos</option>
+                            <option value="Sim" {% if request.GET.cancelado == 'Sim' %}selected{% endif %}>Sim</option>
+                            <option value="Não" {% if request.GET.cancelado == 'Não' %}selected{% endif %}>Não</option>
+                        </select>
+                    </div>
+
+                    <div class="col-md-2 d-flex align-items-end">
+                        <button type="submit" class="btn btn-sm btn-secondary w-100 me-1">Filtrar</button>
+                        <a href="{% url 'suspensos' %}" class="btn btn-sm btn-outline-secondary w-100">Limpar</a>
+                    </div>
+                </form>
+        </div>
+    </div>
+
+    <div class="card shadow-sm">
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover table-striped align-middle mb-0" style="font-size: 0.9rem;">
+                    <thead class="bg-light">
+                        <tr>
+                            <th>Status Calculado</th>
+                            <th>CNPJ</th>
+                            <th>CNPJ Raiz</th>
+                            <th>Razão Social</th>
+                            <th>Estab.</th>
+                            <th class="text-center">Dt. Suspensão</th>
+                            <th class="text-center">Man: Suspenso</th>
+                            <th class="text-center">Man: Cancelado</th>
+                            <th class="text-end">Inadimplência</th>
+                            <th class="text-center">Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for c in clientes %}
+                        <tr>
+                            <td>
+                                <span class="badge rounded-pill 
+                                    {% if c.status == 'Restabelecer' %}bg-success
+                                    {% elif c.status == 'Cancelado' %}bg-danger
+                                    {% elif c.status == 'Suspenso' %}bg-warning text-dark
+                                    {% else %}bg-secondary{% endif %}">
+                                    {{ c.status }}
+                                </span>
+                            </td>
+                            <td>{{ c.cnpj }}</td>
+                            <td>{{ c.cnpj_raiz }}</td>
+                            <td class="text-truncate" style="max-width: 200px;" title="{{ c.razao_social }}">
+                                {{ c.razao_social }}
+                            </td>
+                            <td>{{ c.estabelecimento }}</td>
+                            <td class="text-center">{{ c.data_suspensao|date:"d/m/Y"|default:"-" }}</td>
+                            
+                            <td class="text-center">
+                                {% if c.suspenso %}
+                                    <span class="badge bg-warning text-dark">{{ c.suspenso }}</span>
+                                {% else %}
+                                    <span class="text-muted">-</span>
+                                {% endif %}
+                            </td>
+                            
+                            <td class="text-center">
+                                {% if c.cancelado_flag %}
+                                    <span class="badge bg-danger">{{ c.cancelado_flag }}</span>
+                                {% else %}
+                                    <span class="text-muted">-</span>
+                                {% endif %}
+                            </td>
+
+                            <td class="text-end">
+                                {% if c.inadimplencia2 %}
+                                    R$ {{ c.inadimplencia2|floatformat:2 }}
+                                {% else %}
+                                    -
+                                {% endif %}
+                            </td>
+
+                            <td class="text-center">
+                                <button class="btn btn-sm btn-light border" data-bs-toggle="modal" data-bs-target="#modalEditar{{ c.id }}" title="Editar Manualmente">
+                                    <i class="bi bi-pencil-square text-primary"></i>
+                                </button>
+                                
+                                <div class="modal fade text-start" id="modalEditar{{ c.id }}" tabindex="-1">
+                                    <div class="modal-dialog">
+                                        <div class="modal-content">
+                                            <form method="post" action="{% url 'editar_suspenso' c.id %}">
+                                                {% csrf_token %}
+                                                <div class="modal-header">
+                                                    <h6 class="modal-title">Editar: {{ c.razao_social|truncatechars:30 }}</h6>
+                                                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                                </div>
+                                                <div class="modal-body">
+                                                    <div class="mb-3">
+                                                        <label class="form-label">Suspenso (Manual)</label>
+                                                        <input type="text" name="suspenso" class="form-control" value="{{ c.suspenso|default:'' }}" placeholder="Ex: Sim">
+                                                    </div>
+                                                    <div class="mb-3">
+                                                        <label class="form-label">Cancelado? (Manual)</label>
+                                                        <input type="text" name="cancelado_flag" class="form-control" value="{{ c.cancelado_flag|default:'' }}" placeholder="Ex: Sim">
+                                                    </div>
+                                                    <div class="alert alert-info py-2 small">
+                                                        <i class="bi bi-info-circle"></i> O Status é calculado automaticamente ao clicar em "Processar".
+                                                    </div>
+                                                </div>
+                                                <div class="modal-footer">
+                                                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+                                                    <button type="submit" class="btn btn-primary btn-sm">Salvar</button>
+                                                </div>
+                                            </form>
+                                        </div>
+                                    </div>
+                                </div>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="10" class="text-center py-5 text-muted">
+                                <div class="mb-2"><i class="bi bi-folder2-open display-4"></i></div>
+                                <h5>Nenhum registro encontrado</h5>
+                                <p>Importe uma planilha ou ajuste os filtros de pesquisa.</p>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        <div class="card-footer bg-light py-2">
+            <small class="text-muted">Total de registros: {{ clientes.count }}</small>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="modalImportar" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Importar Arquivo de Suspensos</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="post" enctype="multipart/form-data">
+                {% csrf_token %}
+                <input type="hidden" name="upload_file" value="true">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Selecione o arquivo (.xlsx)</label>
+                        <input type="file" name="arquivo" class="form-control" accept=".xlsx" required>
+                    </div>
+                    <div class="alert alert-warning small">
+                        <i class="bi bi-exclamation-triangle-fill"></i> Esta ação irá substituir todos os dados existentes no banco de suspensos pelos dados da planilha.
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">Iniciar Importação</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="modalLimparBanco" tabindex="-1">
+    <div class="modal-dialog modal-sm">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title">Limpar Base?</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body text-center">
+                <p>Tem certeza que deseja apagar <strong>todos</strong> os registros de clientes suspensos?</p>
+                <p class="small text-muted">Essa ação não pode ser desfeita.</p>
+            </div>
+            <div class="modal-footer justify-content-center">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <form method="post">
+                    {% csrf_token %}
+                    <input type="hidden" name="limpar_banco" value="true">
+                    <button type="submit" class="btn btn-danger">Sim, Limpar Tudo</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    function ativarLoading() {
+        document.getElementById('btnProcessar').style.display = 'none';
+        document.getElementById('btnLoading').style.display = 'inline-block';
+    }
+</script>
+{% endblock %}
