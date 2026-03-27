@@ -10,15 +10,16 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
     
     <link rel="stylesheet" href="{% static 'css/global.css' %}">
-    
+    <link rel="stylesheet" href="{% static 'css/style.css' %}">
     {% block extra_css %}{% endblock %}
 </head>
-<body>
+<body class="d-flex flex-column min-vh-100">
 
     <nav class="navbar navbar-expand-lg navbar-dark mb-4" style="background-color: #212529;">
         <div class="container">
-            <a class="navbar-brand fw-bold" href="{% url 'dashboard' %}">
-                <i class="bi bi-shield-lock-fill text-warning"></i> PROTEGE
+            <a class="navbar-brand fw-bold" href="{% url 'dashboard_resumo' %}">
+                <img src="{% static 'images/logo-protege.png' %}" alt="Logo" class="logo-navbar">
+                <span>PROTEGE</span>
             </a>
             
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#menuPrincipal">
@@ -28,7 +29,7 @@
             <div class="collapse navbar-collapse" id="menuPrincipal">
                 <ul class="navbar-nav me-auto mb-2 mb-lg-0">
                     <li class="nav-item">
-                        <a class="nav-link" href="{% url 'dashboard' %}">Home</a>
+                        <a class="nav-link" href="{% url 'dashboard_resumo' %}">Home</a>
                     </li>
                     <li class="nav-item">
                         <a class="nav-link" href="{% url 'suspensos' %}">Suspensos</a>

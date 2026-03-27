@@ -33,8 +33,7 @@ class EditarSuspensoForm(forms.ModelForm):
             # já que ele é calculado pelo robô. Se quiser editar, remova o attrs.
             'status': forms.TextInput(attrs={'class': 'form-control', 'readonly': 'readonly'}),
         }
-from django import forms
-from .models import ClienteSuspenso
+
 
 class EditarSuspensoForm(forms.ModelForm):
     class Meta:
@@ -49,3 +48,10 @@ class EditarSuspensoForm(forms.ModelForm):
             if str(valor).lower() == 'nan':
                 cleaned_data[field] = None
         return cleaned_data
+    
+class ImportarMatrizForm(forms.Form):
+    arquivo_excel = forms.FileField(label="Selecione o Relatório Excel (Matriz)")
+    tipo_relatorio = forms.ChoiceField(
+        choices=[('Geral', 'Geral'), ('Previa', 'Prévia'),('Resumo', 'Resumo')],
+        initial='Resumo'
+    )

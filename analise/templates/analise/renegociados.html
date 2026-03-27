@@ -1,0 +1,174 @@
+{% extends 'base.html' %}
+{% load static %}
+{% load humanize %}
+
+{% block title %}Renegociações | Protege{% endblock %}
+
+{% block extra_css %}
+    <link rel="stylesheet" href="{% static 'analise/style.css' %}">
+{% endblock %}
+
+{% block content %}
+<div id="wrapper">
+    <nav id="sidebar">
+        <div class="sidebar-header">
+            <button type="button" id="sidebarCollapse" class="btn btn-sm btn-outline-light mb-3">
+                <i class="bi bi-list"></i>
+            </button>
+            <h6 class="mb-0 text-white small text-uppercase" style="letter-spacing: 1px;">Módulos de Análise</h6>
+        </div>
+
+        <ul class="list-unstyled components">
+            <li>
+                <a href="{% url 'dashboard_resumo' %}">
+                    <i class="bi bi-speedometer2 me-2"></i> Resumo Gerencial
+                </a>
+            </li>
+            <li class="active"><a href="{% url 'renegociados' %}"><i class="bi bi-arrow-repeat me-2"></i> Renegociações</a></li>
+            <li><a href="#"><i class="bi bi-box-seam me-2"></i> Aging Pacote</a></li>
+            <li><a href="#"><i class="bi bi-briefcase me-2"></i> Negócio</a></li>
+            <li><a href="#"><i class="bi bi-building me-2"></i> Empresa</a></li>
+            <li class="{% if segmento_ativo == 'aging' %}active{% endif %}">
+            <a href="{% url 'dashboard_aging' %}"><i class="bi bi-clock-history me-2"></i> Aging</a></li>
+            <li><a href="#"><i class="bi bi-gavel me-2"></i> Aging Jurídico</a></li>
+        </ul>
+    </nav>
+
+    <div id="content">
+        <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-2 pb-2 mb-3 border-bottom">
+            <h2 class="h4 fw-bold text-dark mb-0">Visão Consolidada - Renegociações</h2>
+            <div class="btn-toolbar mb-2 mb-md-0">
+                {% if data_ref %}
+                    <span class="badge bg-secondary fs-6 shadow-sm"><i class="bi bi-calendar-check me-2"></i> Data Base: {{ data_ref|date:"d/m/Y" }}</span>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="row mb-4 mt-2 g-3">
+            <div class="col-md-4">
+                <div class="card card-resumo border-0 border-start border-primary border-4 shadow-sm h-100">
+                    <div class="card-body">
+                        <div class="text-muted small text-uppercase fw-bold mb-1">Total (Conforme Filtros)</div>
+                            <h4 class="fw-bold mb-0">
+                                <span class="simbolo-rs">R$</span> {{ card_total|default:0|floatformat:"2g" }}
+                            </h4>
+                        <i class="bi bi-cash-stack icon-card text-primary"></i>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card card-resumo border-0 border-start border-danger border-4 shadow-sm h-100">
+                    <div class="card-body">
+                        <div class="text-muted small text-uppercase fw-bold mb-1 text-danger">Quebra de Acordo / Não Pagas</div>
+                            <h4 class="fw-bold mb-0 text-danger">
+                                <span class="simbolo-rs">R$</span> {{ card_quebra|default:0|floatformat:"2g" }}
+                            </h4>
+                        <i class="bi bi-exclamation-triangle icon-card text-danger"></i>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card card-resumo border-0 border-start border-warning border-4 shadow-sm h-100">
+                    <div class="card-body">
+                        <div class="text-muted small text-uppercase fw-bold mb-1 text-warning">Renegociações a Vencer</div>
+                            <h4 class="fw-bold mb-0">
+                                <span class="simbolo-rs">R$</span> {{ card_vencer|default:0|floatformat:"2g" }}
+                            </h4>
+                        <i class="bi bi-calendar-date icon-card text-warning"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-body bg-white rounded">
+                <form method="GET" class="row g-3">
+                    <div class="col-md-3">
+                        <label class="form-label fw-bold text-muted small">Status</label>
+                        <select name="status" class="form-select form-select-sm" onchange="this.form.submit()">
+                            <option value="">Todos</option>
+                            {% for op in lista_status %}
+                                <option value="{{ op }}" {% if f_status == op %}selected{% endif %}>{{ op }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label fw-bold text-muted small">Pacote</label>
+                        <select name="pacote" class="form-select form-select-sm" onchange="this.form.submit()">
+                            <option value="">Todos</option>
+                            {% for op in lista_pacote %}
+                                <option value="{{ op }}" {% if f_pacote == op %}selected{% endif %}>{{ op }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label fw-bold text-muted small">Negócio</label>
+                        <select name="negocio" class="form-select form-select-sm" onchange="this.form.submit()">
+                            <option value="">Todos</option>
+                            {% for op in lista_negocio %}
+                                <option value="{{ op }}" {% if f_negocio == op %}selected{% endif %}>{{ op }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-3 d-flex align-items-end">
+                        <a href="{% url 'renegociados' %}" class="btn btn-sm btn-outline-danger w-100">Limpar Filtros</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <div class="table-responsive shadow-sm bg-white rounded">
+            {% if vazio %}
+                <div class="alert alert-warning text-center m-3 shadow-sm">
+                    <i class="bi bi-info-circle-fill"></i> Nenhuma renegociação encontrada para os filtros selecionados.
+                </div>
+            {% else %}
+                <table class="table table-sm table-hover table-striped mb-0 align-middle">
+                    <thead class="table-dark">
+                        <tr>
+                            <th class="text-start ps-3">Rótulos de Linha</th>
+                            {% for ano in anos %}
+                                <th class="text-end">{{ ano }}</th>
+                            {% endfor %}
+                            <th class="text-end fw-bold pe-3">Total Geral</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for linha in linhas %}
+                        <tr>
+                            <td class="fw-bold text-secondary ps-3">{{ linha.cliente }}</td>
+                            {% for valor in linha.valores %}
+                                <td class="text-end">{% if valor > 0 %}{{ valor|intcomma }}{% else %}-{% endif %}</td>
+                            {% endfor %}
+                            <td class="text-end fw-bold pe-3">{{ linha.total|intcomma }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                    <tfoot class="table-secondary fw-bold">
+                        <tr>
+                            <td class="ps-3">Total Geral</td>
+                            {% for total_ano in totais_rodape %}
+                                <td class="text-end">{{ total_ano|intcomma }}</td>
+                            {% endfor %}
+                            <td class="text-end text-primary fs-5 pe-3">{{ total_geral|intcomma }}</td>
+                        </tr>
+                    </tfoot>
+                </table>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.addEventListener("DOMContentLoaded", function() {
+        const sidebar = document.getElementById('sidebar');
+        const sidebarCollapse = document.getElementById('sidebarCollapse');
+
+        sidebarCollapse.addEventListener('click', function() {
+            sidebar.classList.toggle('active');
+        });
+    });
+</script>
+{% endblock %}

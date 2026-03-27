@@ -1,0 +1,116 @@
+{% extends 'base.html' %}
+{% load static %}
+{% load humanize %}
+
+{% block title %}Aging de Devedores | Protege{% endblock %}
+
+{% block extra_css %}
+    <!-- Importação limpa do CSS externo -->
+    <link rel="stylesheet" href="{% static 'analise/style.css' %}">
+{% endblock %}
+
+{% block content %}
+<div id="wrapper">
+    {% include 'includes/sidebar.html' %} 
+
+    <div id="content" class="p-4">
+        <!-- Cabeçalho -->
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h2 class="h3 fw-bold text-dark mb-0">Relatório de Aging</h2>
+            <a href="/admin/analise/devedoraging/import/" class="btn btn-outline-primary btn-sm">
+                <i class="bi bi-file-earmark-excel"></i> Importar Aging
+            </a>
+        </div>
+
+        <!-- Filtros de Comparação -->
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-body">
+                <form method="GET" class="row g-3 align-items-end">
+                    <div class="col-auto">
+                        <label class="form-label fw-bold text-muted small">Mês de Análise:</label>
+                        <select name="data_atual" class="form-select form-select-custom">
+                            {% for reg in registros_dropdown %}
+                                <option value="{{ reg.id }}" {% if obj_atual.id == reg.id %}selected{% endif %}>
+                                    {{ reg.data_base|date:"d/m/Y" }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-auto">
+                        <label class="form-label fw-bold text-muted small">Comparar com (Base):</label>
+                        <select name="data_base" class="form-select form-select-custom">
+                            {% for reg in registros_dropdown %}
+                                <option value="{{ reg.id }}" {% if obj_base.id == reg.id %}selected{% endif %}>
+                                    {{ reg.data_base|date:"d/m/Y" }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-auto">
+                        <button type="submit" class="btn btn-primary px-4 fw-bold">
+                            Atualizar Dashboard
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Tabela de Aging -->
+        <div class="table-responsive shadow-sm rounded-3">
+            <table class="table table-hover mb-0 bg-white table-aging">
+                <thead class="text-center">
+                    <tr>
+                        <th class="text-start ps-4">AGING</th>
+                        <th>ATÉ 30 DIAS</th>
+                        <th>31 A 60</th>
+                        <th>61 A 90</th>
+                        <th>91 A 120</th>
+                        <th>121 A 150</th>
+                        <th>151 A 180</th>
+                        <th>ACIMA 180</th>
+                        <th class="bg-primary text-white">TOTAL</th>
+                    </tr>
+                </thead>
+                <tbody class="text-center">
+                    <!-- Histórico do Banco -->
+                    {% for reg in historico %}
+                    <tr>
+                        <td class="text-start ps-4 fw-bold text-secondary">
+                            Base-{{ reg.data_base|date:"d/m/Y" }}
+                        </td>
+                        <td>{{ reg.ate_30_dias|intcomma }}</td>
+                        <td>{{ reg.de_31_a_60_dias|intcomma }}</td>
+                        <td>{{ reg.de_61_a_90_dias|intcomma }}</td>
+                        <td>{{ reg.de_91_a_120_dias|intcomma }}</td>
+                        <td>{{ reg.de_121_a_150_dias|intcomma }}</td>
+                        <td>{{ reg.de_151_a_180_dias|intcomma }}</td>
+                        <td>{{ reg.mais_de_180_dias|intcomma }}</td>
+                        <td class="fw-bold bg-total-col">{{ reg.total|intcomma }}</td>
+                    </tr>
+                    {% endfor %}
+
+                    <!-- Linha Variação % -->
+                    <tr class="row-variacao">
+                        <td class="text-start ps-4 fw-bold">Variação % - Mês</td>
+                        {% for v in var_pct %}
+                        <td class="{% if v < 0 %}text-negativo{% else %}text-positivo{% endif %}">
+                            {{ v|floatformat:1 }}%
+                        </td>
+                        {% endfor %}
+                    </tr>
+
+                    <!-- Linha Variação R$ -->
+                    <tr class="border-0">
+                        <td class="text-start ps-4 fw-bold">Variação R$ - Mês</td>
+                        {% for v in var_reais %}
+                        <td class="{% if v < 0 %}text-negativo{% else %}text-positivo{% endif %}">
+                            {{ v|intcomma }}
+                        </td>
+                        {% endfor %}
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

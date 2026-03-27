@@ -4,6 +4,7 @@ from io import BytesIO
 from django.http import HttpResponse
 from .models import BaseGeral, CodigoIgnorado
 from .auxiliar import aplicar_regras_banco
+from .etl_relatorios import popular_banco_relatorio
 
 # =============================================================================
 # FUNÇÃO 1: RELATÓRIO GERAL (Relatório Completo / Staging)
@@ -20,51 +21,33 @@ def processar_geral_pandas(request, data_corte_str, data_correcao_str):
     if df.empty:
         raise ValueError("A Base Geral está vazia. Faça a importação no Passo 1 primeiro.")
 
-    # Mapeamento: Variável Lógica -> Nome do Campo no Model
     cols_origem = {
-        'especie': 'especie',
-        'vencto': 'dt_vencto_original',
-        'codigo': 'codigo',
-        'empresa': 'empresa',
-        'unid_negoc': 'unid_negoc',
-        'cnpj_cliente': 'cnpj_cpf_cliente',
-        'cnpj_origem': 'cnpj',
-        'estabelec': 'estabelecimento',
-        'serie': 'serie',
-        'titulo': 'titulo',
-        'parcela': 'parcela',
-        'nome_abrev': 'nome_abrev',
-        'dt_emissao': 'dt_emissao_orig',
-        'dt_emissao_ren': 'dt_emissao_ult_ren',
-        'dt_vencto_atual': 'dt_vencto_atual',
-        'vl_bruto': 'vl_bruto_orig',
+        'especie': 'especie', 'vencto': 'dt_vencto_original', 'codigo': 'codigo',
+        'empresa': 'empresa', 'unid_negoc': 'unid_negoc', 'cnpj_cliente': 'cnpj_cpf_cliente',
+        'cnpj_origem': 'cnpj', 'estabelec': 'estabelecimento', 'serie': 'serie',
+        'titulo': 'titulo', 'parcela': 'parcela', 'nome_abrev': 'nome_abrev',
+        'dt_emissao': 'dt_emissao_orig', 'dt_emissao_ren': 'dt_emissao_ult_ren',
+        'dt_vencto_atual': 'dt_vencto_atual', 'vl_bruto': 'vl_bruto_orig',
         'vl_liquido': 'vl_liquido'
     }
 
-    # A. Filtro AN/DNI
     c_esp = cols_origem['especie']
     if c_esp in df.columns:
         df[c_esp] = df[c_esp].astype(str).str.strip()
         df = df[~df[c_esp].isin(['AN', 'DNI'])]
 
-    # B. Datas e Corte
     c_vencto = cols_origem['vencto']
     dt_limite = pd.to_datetime(data_corte_str).normalize()
 
-    # Converter datas cruciais
     for col_data in [c_vencto, cols_origem['dt_emissao'], cols_origem['dt_vencto_atual']]:
         if col_data in df.columns:
             df[col_data] = pd.to_datetime(df[col_data], errors='coerce')
 
-    # Filtro de Data
     df['_data_oculta'] = df[c_vencto]
     df = df.dropna(subset=['_data_oculta'])
     df = df[df['_data_oculta'] <= dt_limite]
-
-    # Ordenação
     df = df.sort_values(by='_data_oculta', ascending=False)
 
-    # E. Lista Negra (Banco)
     c_cod = cols_origem['codigo']
     codigos_db = CodigoIgnorado.objects.values_list('codigo', flat=True)
     lista_negra = [str(c).strip() for c in codigos_db]
@@ -74,7 +57,6 @@ def processar_geral_pandas(request, data_corte_str, data_correcao_str):
         df[c_cod] = df[c_cod].str.replace(r'\.0$', '', regex=True)
         df = df[~df[c_cod].isin(lista_negra)]
 
-    # F. COR/02
     c_emp = cols_origem['empresa']
     c_un = cols_origem['unid_negoc']
     if c_emp in df.columns and c_un in df.columns:
@@ -83,7 +65,6 @@ def processar_geral_pandas(request, data_corte_str, data_correcao_str):
         condicao_cor = ((df[c_emp] == '02') & (df[c_un].str.upper() == 'COR'))
         df = df[~condicao_cor]
 
-    # G. Filtro FOR / CPF
     c_cli = cols_origem['cnpj_cliente']
     if c_cli in df.columns:
         df[c_cli] = df[c_cli].astype(str).str.strip()
@@ -91,13 +72,11 @@ def processar_geral_pandas(request, data_corte_str, data_correcao_str):
         is_cpf = df[c_cli].str.len() == 14
         df = df[~(is_for & is_cpf)]
 
-    # H. ATI/VEN -> VEN
     mask_ati = df[c_un].str.upper() == 'ATI'
     mask_ven = df[c_un].str.upper() == 'VEN'
     df.loc[mask_ati, c_un] = 'VEN'
     df.loc[mask_ven, c_un] = 'VEN'
 
-    # I. Preencher CNPJ Vazio
     c_origem = cols_origem['cnpj_origem']
     mask_vazio = df[c_cli].isna() | (df[c_cli] == '') | (df[c_cli] == 'nan')
     df.loc[mask_vazio, c_cli] = df.loc[mask_vazio, c_origem]
@@ -107,21 +86,14 @@ def processar_geral_pandas(request, data_corte_str, data_correcao_str):
     # =========================================================
     df_final = pd.DataFrame()
 
-    # Campos Diretos do Banco
     df_final['Estabelec'] = df[cols_origem['estabelec']]
     df_final['Espécie'] = df[cols_origem['especie']]
     df_final['Série'] = df[cols_origem['serie']]
     df_final['Título'] = df[cols_origem['titulo']]
-    
-    # Parcela com 2 dígitos (String)
     df_final['Parcela'] = df[cols_origem['parcela']].astype(str).str.replace(r'\.0$', '', regex=True).str.zfill(2)
-    
     df_final['Unid.Negoc'] = df[cols_origem['unid_negoc']]
     df_final['Empresa'] = df[cols_origem['empresa']]
-    
-    # ATENÇÃO: Renomeado para 'Codigo' (sem acento) conforme solicitado
     df_final['Codigo'] = df[cols_origem['codigo']] 
-    
     df_final['CNPJ/CPF Cliente'] = df[cols_origem['cnpj_cliente']]
     df_final['Nome Abrev'] = df[cols_origem['nome_abrev']]
     df_final['Dt.Emissão Orig'] = df[cols_origem['dt_emissao']]
@@ -131,19 +103,17 @@ def processar_geral_pandas(request, data_corte_str, data_correcao_str):
     df_final['Vl.Bruto Orig.'] = df[cols_origem['vl_bruto']]
     df_final['Vl.líquido'] = df[cols_origem['vl_liquido']]
     
-    # Campos Calculados / Vazios Iniciais
     df_final['Regional'] = (
         df_final['Estabelec'].astype(str).str.strip() +
         df_final['Série'].astype(str).str.strip() +
         df_final['Título'].astype(str).str.strip()
     )
     df_final['Base Operacional'] = df_final['Estabelec']
-    df_final['Carteira'] = "" # Será preenchido pelo auxiliar
+    df_final['Carteira'] = "" 
     df_final['Pacote'] = ""
     df_final['Raiz do CNPJ'] = df_final['CNPJ/CPF Cliente'].astype(str).str.split('/').str[0].str.strip()
     df_final['Razão Agrupada'] = ""
     
-    # Mapa Unidade de Negócio
     mapa_negocio = {
         'PAX': 'Proair', 'LMO': 'Vigilância', 'PRT': 'Proair', 'GHD': 'Proair',
         'CTV': 'Logística', 'CSG': 'Carga Segura', 'EXE': 'Proair', 'VIG': 'Vigilância',
@@ -152,7 +122,6 @@ def processar_geral_pandas(request, data_corte_str, data_correcao_str):
     }
     df_final['Negócio'] = df_final['Unid.Negoc'].str.strip().str.upper().map(mapa_negocio).fillna('')
 
-    # Tratamento Empresa
     df_final['Empresa'] = df_final['Empresa'].astype(str).str.strip().str.zfill(2)
     mapa_empresa = {
         '02': 'PROTEGE', '04': 'PROAIR', '05': 'PROVIG',
@@ -160,24 +129,20 @@ def processar_geral_pandas(request, data_corte_str, data_correcao_str):
     }
     df_final['Empresa'] = df_final['Empresa'].replace(mapa_empresa)
 
-    # Tratamento de Datas
     cols_datas_excel = ['Dt.Emissão Orig', 'Dt.Emissão Últ.Ren', 'Dt.Vencto Original', 'Dt.Vencto Atual']
     for col in cols_datas_excel:
         df_final[col] = pd.to_datetime(df_final[col], errors='coerce')
         if pd.api.types.is_datetime64_any_dtype(df_final[col]):
              df_final[col] = df_final[col].dt.tz_localize(None)
 
-    # Tratamento de Valores
     cols_valores = ['Vl.Bruto Orig.', 'Vl.líquido']
     for col in cols_valores:
         df_final[col] = pd.to_numeric(df_final[col], errors='coerce').fillna(0.0)
 
-    # Regras e Cálculos Iniciais (Dias em Atraso)
     dt_correcao = pd.to_datetime(data_correcao_str).normalize()
     df_final['Dias em Atraso'] = (dt_correcao - df_final['Dt.Vencto Original']).dt.days.fillna(0).astype(int)
     df_final['Dias em Atraso RE'] = (dt_correcao - df_final['Dt.Vencto Atual']).dt.days.fillna(0).astype(int)
 
-    # Aging
     def classificar_aging(dias):
         if dias <= 0: return "A VENCER"
         if dias <= 30: return "Até 30 dias"
@@ -191,7 +156,6 @@ def processar_geral_pandas(request, data_corte_str, data_correcao_str):
     df_final['Aging'] = df_final['Dias em Atraso'].apply(classificar_aging)
     df_final['Aging RE'] = df_final['Dias em Atraso RE'].apply(classificar_aging)
 
-    # Status
     def classificar_status(row):
         dias_orig = row['Dias em Atraso']
         dias_re = row['Dias em Atraso RE']
@@ -201,15 +165,11 @@ def processar_geral_pandas(request, data_corte_str, data_correcao_str):
 
     df_final['Status'] = df_final.apply(classificar_status, axis=1)
 
-    # Aplicação de Regras do Banco Auxiliar (Preenche Carteira, Razão Agrupada, etc)
     try:
         df_final = aplicar_regras_banco(df_final)
     except Exception as e:
         print(f"Aviso: Não foi possível aplicar regras do auxiliar: {e}")
 
-    # =========================================================
-    # REORDENAÇÃO FINAL (ESSENCIAL PARA O COPY-PASTE)
-    # =========================================================
     colunas_ordenadas = [
         'Regional', 'Base Operacional', 'Estabelec', 'Espécie', 'Série', 'Título', 'Parcela', 
         'Unid.Negoc', 'Negócio', 'Empresa', 'Carteira', 'Codigo', 'Pacote', 
@@ -218,30 +178,38 @@ def processar_geral_pandas(request, data_corte_str, data_correcao_str):
         'Vl.Bruto Orig.', 'Vl.líquido', 'Dias em Atraso', 'Dias em Atraso RE', 
         'Aging', 'Aging RE', 'Status'
     ]
-    
-    # Garante que o DataFrame tenha apenas essas colunas e nessa ordem
-    # Se alguma coluna faltar, o Pandas avisará, mas criamos todas acima.
     df_final = df_final[colunas_ordenadas]
 
     # =========================================================
     # SEPARAÇÃO EM 3 ABAS
     # =========================================================
     mask_juridico = df_final['Carteira'].astype(str).str.strip() == 'Recuperação Judicial'
-    
-    # Aba 1: Jurídico
     df_juridico = df_final[mask_juridico]
-
-    # Quem não é jurídico
     df_nao_juridico = df_final[~mask_juridico]
 
-    # Aba 2: Renegociados
     filtros_reneg = ['RENEGOCIAÇÕES A VENCER', 'QUEBRA DE ACORDO / NÃO PAGAS']
     df_renegociados = df_nao_juridico[df_nao_juridico['Status'].isin(filtros_reneg)]
 
-    # Aba 3: Todos os Clientes (Inadimplência + Quebra)
     filtros_todos = ['INADIMPLÊNCIA', 'QUEBRA DE ACORDO / NÃO PAGAS']
     df_todos_clientes = df_nao_juridico[df_nao_juridico['Status'].isin(filtros_todos)]
 
+    # =========================================================
+    # INTELIGÊNCIA: POPULAR BANCO DE DADOS EM BACKGROUND
+    # =========================================================
+    try:
+        popular_banco_relatorio(
+            df_todos=df_todos_clientes, 
+            df_renegociados=df_renegociados, 
+            df_juridico=df_juridico, 
+            data_corte_str=data_corte_str
+        )
+    except Exception as e:
+        print(f"Erro ao popular tabelas do Dashboard: {e}")
+    # =========================================================
+
+    # =========================================================
+    # GERAÇÃO DO ARQUIVO EXCEL
+    # =========================================================
     response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
     nome_arquivo = f"Relatorio_Tratado_{data_corte_str.replace('/', '-')}.xlsx"
     response['Content-Disposition'] = f'attachment; filename="{nome_arquivo}"'
@@ -255,26 +223,20 @@ def processar_geral_pandas(request, data_corte_str, data_correcao_str):
         def salvar_e_formatar(dataframe, nome_aba):
             dataframe.to_excel(writer, index=False, sheet_name=nome_aba)
             worksheet = writer.sheets[nome_aba]
-            
-            # Largura padrão para visualização
             worksheet.set_column('A:AB', 15)
             
             if not dataframe.empty:
                 colunas = dataframe.columns.tolist()
-                
-                # Formata Datas
                 for col_name in ['Dt.Emissão Orig', 'Dt.Emissão Últ.Ren', 'Dt.Vencto Original', 'Dt.Vencto Atual']:
                     if col_name in colunas:
                         idx = colunas.index(col_name)
                         worksheet.set_column(idx, idx, 15, fmt_data)
                 
-                # Formata Valores
                 for col_name in ['Vl.Bruto Orig.', 'Vl.líquido']:
                     if col_name in colunas:
                         idx = colunas.index(col_name)
                         worksheet.set_column(idx, idx, 15, fmt_moeda)
 
-                # Formata Parcela como Texto (Para manter o 01)
                 if 'Parcela' in colunas:
                     idx = colunas.index('Parcela')
                     worksheet.set_column(idx, idx, 10, fmt_texto)
@@ -465,3 +427,7 @@ def gerar_excel_contas_receber():
     workbook.close()
     output.seek(0)
     return output
+
+# No topo do arquivo
+from .etl_relatorios import popular_banco_relatorio
+

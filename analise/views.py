@@ -2,7 +2,7 @@
 import pandas as pd
 import numpy as np
 from datetime import datetime
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 from .services import processar_geral_pandas # <--- Certifique-se de importar
 from .services import gerar_excel_contas_receber
 from django.shortcuts import render, redirect, get_object_or_404
@@ -10,6 +10,7 @@ from django.http import HttpResponse
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.db import transaction
+from django.db.models import Max, Sum
 import unicodedata
 import re
 from .forms import UploadSuspensosForm, EditarSuspensoForm
@@ -20,10 +21,11 @@ from .models import (
     Consolidado_Juridico, 
     Bd_Clientes, 
     BaseGeral,
-    ClienteSuspenso
+    ClienteSuspenso,
+    ResumoInadimplencia,
+    DevedorAging,
+    BaseHistoricaRelatorio
 )
-
-
 
 
 # ==============================================================================
@@ -65,10 +67,6 @@ def index(request):
     else:
         return redirect('login')
 
-@login_required
-def dashboard(request):
-    # ATENÇÃO: Agora aponta para analise/dashboard.html
-    return render(request, 'analise/dashboard.html')
 
 def password_change_done_custom(request):
     if request.user.is_authenticated:
@@ -690,3 +688,290 @@ def processar_relatorio(request):
             
     # Se tentar acessar via GET sem querer, volta para a tela inicial
     return redirect('importar_geral')
+@login_required
+def dashboard_inadimplencia(request):
+    # 1. Trazemos TODOS os títulos ativos (A base já é filtrada pelo processo de PDD)
+    dados = ResumoInadimplencia.objects.filter(tipo_relatorio='Resumo').values(
+        'seguimento', 'data', 'valor'
+    )
+    
+    if not dados:
+        return render(request, 'dashboard.html', {'tabela': None})
+
+    df = pd.DataFrame(dados)
+    
+    # HIGIENIZAÇÃO: Garante que "Logística" e "Logística " sejam agrupados juntos
+    df['seguimento'] = df['seguimento'].str.strip()
+    
+    # 2. AGRUPAMENTO: Soma todos os títulos (estab+serie+titulo) de um mesmo segmento/data
+    df_pivot = df.pivot_table(
+        index='seguimento', 
+        columns='data', 
+        values='valor',
+        aggfunc='sum' 
+    ).fillna(0)
+    
+    # --- LÓGICA DO DEMONSTRATIVO ---
+    segmentos_operacionais = [
+        'Logística', 'Vigilância', 'Segel', 'Proair', 
+        'Provig', 'Logística de Carga', 'Carga Segura'
+    ]
+    
+    # Filtra com segurança
+    segmentos_presentes = [s for s in segmentos_operacionais if s in df_pivot.index]
+    
+    # A. Inadimplência Total - Bruta
+    df_pivot.loc['Inadimplência Total - Bruta'] = df_pivot.loc[segmentos_presentes].sum()
+    
+    # B. Depósitos Não Identificados
+    if 'Depósitos Não Identificados' not in df_pivot.index:
+        df_pivot.loc['Depósitos Não Identificados'] = 0
+        
+    # C. Inadimplência Total - Líquida
+    df_pivot.loc['Inadimplência Total - Líquida'] = (
+        df_pivot.loc['Inadimplência Total - Bruta'] - df_pivot.loc['Depósitos Não Identificados']
+    )
+    
+    # D. Total de Renegociações
+    if 'Total de Renegociações' not in df_pivot.index:
+        df_pivot.loc['Total de Renegociações'] = 0
+
+    # 4. ORDENAÇÃO FINAL
+    ordem_linhas = segmentos_presentes + [
+        'Inadimplência Total - Bruta', 
+        'Depósitos Não Identificados', 
+        'Inadimplência Total - Líquida', 
+        'Total de Renegociações'
+    ]
+    
+    df_final = df_pivot.reindex(ordem_linhas).fillna(0)
+
+    # 5. PREPARAÇÃO PARA O HTML
+    contexto = {
+        'colunas_data': df_final.columns,
+        'linhas_relatorio': [
+            {
+                'nome': str(nome),
+                'valores': row.values,
+                'estilo': 'tabela-total' if 'Total' in str(nome) or 'Líquida' in str(nome) else 'tabela-comum'
+            } 
+            for nome, row in df_final.iterrows()
+        ]
+    }
+
+    return render(request, 'dashboard.html', contexto)
+
+@login_required
+def dashboard_resumo(request):
+    # 1. Busca os dados
+    qs = ResumoInadimplencia.objects.filter(tipo_relatorio='Resumo').values()
+    
+    if not qs:
+        return render(request, 'analise/dashboard.html', {'datas': [], 'linhas': []})
+
+    df = pd.DataFrame(qs)
+    
+    # 2. Pivot e Ordenação Cronológica (Datas na horizontal)
+    df_pivot = df.pivot(index='seguimento', columns='data', values='valor').fillna(0)
+    df_pivot.columns = pd.to_datetime(df_pivot.columns)
+    df_pivot = df_pivot.sort_index(axis=1)
+
+    # 3. Cálculos de Totais
+    operacionais = ['Logística', 'Vigilância', 'Segel', 'Proair', 'Provig', 'Logística de Carga', 'Carga Segura']
+    presentes = [s for s in operacionais if s in df_pivot.index]
+
+    df_pivot.loc['Inadimplência Total - Bruta'] = df_pivot.loc[presentes].sum()
+    
+    if 'Depósitos Não Identificados' not in df_pivot.index:
+        df_pivot.loc['Depósitos Não Identificados'] = 0
+        
+    df_pivot.loc['Inadimplência Total - Líquida'] = (
+        df_pivot.loc['Inadimplência Total - Bruta'] - df_pivot.loc['Depósitos Não Identificados']
+    )
+    
+    if 'Total de Renegociações' not in df_pivot.index:
+        df_pivot.loc['Total de Renegociações'] = 0
+
+    # 4. Cálculo de Variação (Último mês vs Penúltimo)
+    if len(df_pivot.columns) >= 2:
+        df_pivot['variacao'] = df_pivot.iloc[:, -1] - df_pivot.iloc[:, -2]
+    else:
+        df_pivot['variacao'] = 0
+
+    # 5. CRIAÇÃO DO DF_FINAL (AQUI ESTÁ A SOLUÇÃO)
+    ordem_linhas = presentes + [
+        'Inadimplência Total - Bruta', 
+        'Depósitos Não Identificados', 
+        'Inadimplência Total - Líquida', 
+        'Total de Renegociações'
+    ]
+    df_final = df_pivot.reindex([o for o in ordem_linhas if o in df_pivot.index])
+
+    # 6. Dados para os CARDS do topo (Pega a última data disponível)
+    # Usamos .iloc[:, -2] porque a última coluna ( -1 ) agora é a 'variacao'
+    resumo_kpi = {
+        'bruta': df_final.loc['Inadimplência Total - Bruta'].iloc[-2],
+        'liquida': df_final.loc['Inadimplência Total - Líquida'].iloc[-2],
+        'renegociacao': df_final.loc['Total de Renegociações'].iloc[-2],
+    }
+
+    contexto = {
+        'datas': df_final.columns[:-1], # Datas sem a coluna de variação
+        'linhas': [
+            {
+                'nome': nome, 
+                'valores': row[:-1], 
+                'variacao': row['variacao'], 
+                'destaque': nome in ['Inadimplência Total - Bruta', 'Inadimplência Total - Líquida', 'Total de Renegociações']
+            } for nome, row in df_final.iterrows()
+        ],
+        'resumo': resumo_kpi
+    }
+    return render(request, 'analise/dashboard.html', contexto)
+    # =========================================================
+    # Agin
+    # =========================================================
+
+@login_required
+def aging_view(request):
+    # 1. Captura os IDs do formulário de filtro (GET)
+    data_atual_id = request.GET.get('data_atual')
+    data_base_id = request.GET.get('data_base')
+
+    # 2. Busca todo o histórico para as linhas superiores da tabela
+    historico = DevedorAging.objects.all().order_by('data_base')
+    
+    # Lista para os selects do filtro (mais recentes primeiro)
+    registros_dropdown = historico.order_by('-data_base')
+
+    # 3. Define quais registros usar para o cálculo da variação
+    obj_atual = None
+    obj_base = None
+
+    if data_atual_id and data_base_id:
+        obj_atual = DevedorAging.objects.filter(id=data_atual_id).first()
+        obj_base = DevedorAging.objects.filter(id=data_base_id).first()
+    else:
+        # Fallback: Se não houver filtro, compara os dois últimos do histórico
+        if historico.count() >= 2:
+            obj_atual = historico.last()
+            obj_base = historico[historico.count() - 2]
+
+    # 4. Preparação dos cálculos de Variação
+    variacao_reais = []
+    variacao_percentual = []
+    
+    # Mapeamento exato das colunas do seu Model DevedorAging
+    campos = [
+        'ate_30_dias', 'de_31_a_60_dias', 'de_61_a_90_dias', 
+        'de_91_a_120_dias', 'de_121_a_150_dias', 'de_151_a_180_dias', 
+        'mais_de_180_dias', 'total'
+    ]
+
+    if obj_atual and obj_base:
+        for campo in campos:
+            # Forçamos Decimal para evitar o erro de precisão (.37999999)
+            v_atual = Decimal(str(getattr(obj_atual, campo) or 0))
+            v_base = Decimal(str(getattr(obj_base, campo) or 0))
+            
+            # Cálculo Variação R$ (2 casas decimais)
+            diff_rs = (v_atual - v_base).quantize(Decimal("0.00"), rounding=ROUND_HALF_UP)
+            variacao_reais.append(diff_rs)
+            
+            # Cálculo Variação % (1 casa decimal)
+            if v_base != 0:
+                diff_pct = ((v_atual - v_base) / abs(v_base)) * 100
+                variacao_percentual.append(diff_pct.quantize(Decimal("0.1"), rounding=ROUND_HALF_UP))
+            else:
+                variacao_percentual.append(Decimal("0.0"))
+
+    context = {
+        'historico': historico,
+        'registros_dropdown': registros_dropdown,
+        'obj_atual': obj_atual,
+        'obj_base': obj_base,
+        'var_reais': variacao_reais,
+        'var_pct': variacao_percentual,
+        'segmento_ativo': 'aging'
+    }
+    return render(request, 'analise/aging.html', context)
+
+@login_required
+def renegociacoes_view(request):
+    ultima_data = BaseHistoricaRelatorio.objects.filter(aba_origem='Renegociados').aggregate(Max('data_geracao'))['data_geracao__max']
+    
+    if not ultima_data:
+        return render(request, 'analise/renegociados.html', {'vazio': True})
+        
+    qs = BaseHistoricaRelatorio.objects.filter(data_geracao=ultima_data, aba_origem='Renegociados')
+    
+    # Filtros
+    f_status = request.GET.get('status', '')
+    f_pacote = request.GET.get('pacote', '')
+    f_negocio = request.GET.get('negocio', '')
+    
+    if f_status: qs = qs.filter(status=f_status)
+    if f_pacote: qs = qs.filter(pacote=f_pacote)
+    if f_negocio: qs = qs.filter(negocio=f_negocio)
+    
+    # Opções dinâmicas
+    opcoes_base = BaseHistoricaRelatorio.objects.filter(data_geracao=ultima_data, aba_origem='Renegociados')
+    lista_status = opcoes_base.exclude(status__isnull=True).exclude(status='').values_list('status', flat=True).distinct().order_by('status')
+    lista_pacote = opcoes_base.exclude(pacote__isnull=True).exclude(pacote='').values_list('pacote', flat=True).distinct().order_by('pacote')
+    lista_negocio = opcoes_base.exclude(negocio__isnull=True).exclude(negocio='').values_list('negocio', flat=True).distinct().order_by('negocio')
+    
+    # ==========================================
+    # NOVO: CÁLCULO PARA OS CARDS DO TOPO
+    # (Calcula com base na tabela filtrada)
+    # ==========================================
+    total_quebra = qs.filter(status='QUEBRA DE ACORDO / NÃO PAGAS').aggregate(Sum('vl_liquido'))['vl_liquido__sum'] or 0
+    total_vencer = qs.filter(status='RENEGOCIAÇÕES A VENCER').aggregate(Sum('vl_liquido'))['vl_liquido__sum'] or 0
+    total_geral_cards = total_quebra + total_vencer
+
+    # Processamento Pandas
+    df = pd.DataFrame(list(qs.values('nome_abrev', 'dt_vencto_atual', 'vl_liquido')))
+    
+    if df.empty:
+        return render(request, 'analise/renegociados.html', {
+            'vazio': True, 'lista_status': lista_status, 'lista_pacote': lista_pacote, 'lista_negocio': lista_negocio,
+            'card_quebra': total_quebra, 'card_vencer': total_vencer, 'card_total': total_geral_cards
+        })
+        
+    df['dt_vencto_atual'] = pd.to_datetime(df['dt_vencto_atual'])
+    df['Ano'] = df['dt_vencto_atual'].dt.year.fillna(0).astype(int).astype(str)
+    df.loc[df['Ano'] == '0', 'Ano'] = 'Sem Data'
+    
+    pivot = df.pivot_table(index='nome_abrev', columns='Ano', values='vl_liquido', aggfunc='sum', fill_value=0)
+    pivot['Total'] = pivot.sum(axis=1)
+    pivot = pivot.sort_values(by='Total', ascending=False)
+    totais_colunas = pivot.sum(axis=0)
+    
+    anos_colunas = [col for col in pivot.columns if col != 'Total']
+    linhas = []
+    for cliente, row in pivot.iterrows():
+        linhas.append({
+            'cliente': cliente,
+            'valores': [row[ano] for ano in anos_colunas],
+            'total': row['Total']
+        })
+        
+    context = {
+        'anos': anos_colunas,
+        'linhas': linhas,
+        'totais_rodape': [totais_colunas[ano] for ano in anos_colunas],
+        'total_geral': totais_colunas['Total'],
+        'lista_status': lista_status,
+        'lista_pacote': lista_pacote,
+        'lista_negocio': lista_negocio,
+        'f_status': f_status,
+        'f_pacote': f_pacote,
+        'f_negocio': f_negocio,
+        'data_ref': ultima_data,
+        
+        # Variáveis dos Cards
+        'card_quebra': total_quebra,
+        'card_vencer': total_vencer,
+        'card_total': total_geral_cards
+    }
+    
+    return render(request, 'analise/renegociados.html', context)

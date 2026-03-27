@@ -1,7 +1,7 @@
 /* --- Identidade Visual PROTEGE --- */
 :root {
-    --cor-primaria: #004a8f; /* Azul Forte */
-    --cor-secundaria: #ffcd00; /* Amarelo Ouro */
+    --cor-primaria: #004a8f; 
+    --cor-secundaria: #ffcd00; 
     --fundo-pagina: #e9ecef;
 }
 
@@ -21,68 +21,283 @@ body {
     color: var(--cor-secundaria) !important;
 }
 
-/* O Cartão Central */
-.card {
-    border: none;
-    border-top: 5px solid var(--cor-secundaria);
-    border-radius: 10px;
+/* Estrutura do Layout DASHBOARD */
+#wrapper {
+    display: flex;
+    width: 100%;
 }
 
-.card-header {
-    background-color: white;
-    color: var(--cor-primaria);
-    font-weight: bold;
-    border-bottom: 1px solid #eee;
+#sidebar {
+    min-width: 250px;
+    max-width: 250px;
+    min-height: calc(100vh - 56px);
+    background: #2c3e50;
+    color: #fff;
+    transition: all 0.3s;
 }
 
-/* Botões */
-.btn-protege {
-    background-color: var(--cor-primaria);
-    color: white;
+#sidebar.active { margin-left: -250px; }
+
+#sidebar .sidebar-header { padding: 20px; background: #1a252f; }
+
+#sidebar ul li a {
+    padding: 15px 20px;
+    display: block;
+    color: #bdc3c7;
+    text-decoration: none;
+    font-size: 0.9rem;
+}
+
+#sidebar ul li a:hover, #sidebar ul li a.active {
+    color: #fff;
+    background: #34495e;
+    border-left: 4px solid var(--cor-secundaria);
+}
+
+/* 1. O Wrapper não pode deixar o conteúdo vazar */
+#wrapper {
+    display: flex;
+    width: 100%;
+    max-width: 100vw; /* Garante que não passe da largura da tela */
+    overflow-x: hidden; /* Mata qualquer tentativa de scroll no site todo */
+}
+
+/* 2. O Content precisa de um "limite de encolhimento" */
+#content {
+    flex: 1; /* Ocupa todo o espaço restante após o sidebar */
+    min-width: 0; /* ABSOLUTAMENTE CRUCIAL: permite que o flex-item encolha e respeite o container */
+    padding: 20px;
+    background-color: #f8f9fa;
+    display: flex;
+    flex-direction: column;
+}
+
+/* --- TABELA ESTILO EXCEL (Ajustada) --- */
+/* 3. A Tabela deve mandar no próprio scroll */
+.table-responsive {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: auto; /* O scroll lateral nasce aqui dentro */
+    background-color: #fff;
+    border: 1px solid #dee2e6;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+}
+.table-aging {
+    font-size: 0.75rem !important; /* Fonte técnica */
+    white-space: nowrap;
+    border-collapse: separate; 
+    border-spacing: 0;
+}
+
+/* Cabeçalho Fixo */
+.table-aging thead th {
+    background-color: #212529 !important;
+    color: white !important;
+    text-align: center;
     font-weight: 600;
-    border: 1px solid var(--cor-primaria);
+    text-transform: uppercase;
+    padding: 10px;
+    border: 1px solid #454d55;
 }
 
-.btn-protege:hover {
-    background-color: #003366;
-    color: white;
+/* Linhas de Destaque (Cálculos de Totais) */
+.row-destaque-financeiro, 
+.row-destaque-financeiro td {
+    background-color: #f2f2f2 !important; /* Cinza Excel */
+    font-weight: 700 !important;
+    color: #212529 !important;
 }
 
-/* Ícones dos inputs */
-.input-group-text {
-    background-color: var(--cor-secundaria);
-    color: var(--cor-primaria);
-    border: none;
-    font-weight: bold;
+/* --- CONGELAMENTO DA PRIMEIRA COLUNA --- */
+.table-aging th:first-child,
+.table-aging td:first-child {
+    position: sticky;
+    left: 0;
+    z-index: 10;
+    background-color: white; 
+    border-right: 2px solid #dee2e6;
+    min-width: 200px;
 }
-/* ... (Mantenha o código anterior da Home aqui) ... */
 
-/* --- Estilos Específicos da Página de Login --- */
+/* Garante que o Segmento na linha cinza continue cinza ao rolar */
+.row-destaque-financeiro td:first-child {
+    background-color: #f2f2f2 !important;
+}
 
-/* Usamos esta classe para não afetar o body da página Home */
-.body-login {
-    background-color: var(--cor-primaria); /* Fundo Azul */
+/* Cabeçalho da primeira coluna (z-index maior) */
+.table-aging thead th:first-child {
+    z-index: 11;
+    background-color: #212529 !important;
+}
+
+/* --- FORMATAÇÃO DOS NÚMEROS --- */
+.text-valor {
+    font-family: 'Roboto Mono', monospace;
+    font-variant-numeric: tabular-nums;
+}
+
+/* Deixa a barra de rolagem da tabela mais amigável */
+.table-responsive::-webkit-scrollbar {
+    height: 8px;
+}
+.table-responsive::-webkit-scrollbar-track {
+    background: #f1f1f1;
+}
+.table-responsive::-webkit-scrollbar-thumb {
+    background: #ccc;
+    border-radius: 4px;
+}
+.table-responsive::-webkit-scrollbar-thumb:hover {
+    background: #999;
+}
+
+/* --- Efeito Flutuante na Primeira Coluna --- */
+.table-aging th:first-child,
+.table-aging td:first-child {
+    position: sticky;
+    left: 0;
+    z-index: 10;
+    background-color: #ffffff; /* Fundo sólido para cobrir os números ao rolar */
+    
+    /* A Mágica: Sombra projetada apenas para a direita */
+    box-shadow: 5px 0 10px -5px rgba(0, 0, 0, 0.3);
+    
+    /* Removemos a borda simples para não "sujar" a sombra */
+    border-right: none !important; 
+    padding-left: 15px;
+    padding-right: 15px;
+}
+
+/* Garante que o cabeçalho flutuante também tenha a sombra */
+.table-aging thead th:first-child {
+    z-index: 11;
+    background-color: #212529 !important;
+    box-shadow: 5px 0 10px -5px rgba(0, 0, 0, 0.5);
+}
+
+/* Ajuste para as linhas cinzas não perderem a cor ao "colar" */
+.row-destaque-financeiro td:first-child {
+    background-color: #f2f2f2 !important;
+}
+/* Ajuste da Logo na Navbar */
+.logo-navbar {
+    height: 40px !important; /* Tamanho fixo para não quebrar o layout */
+    width: auto;
+    display: inline-block;
+    vertical-align: middle;
+}
+
+/* Ajuste para o texto não ficar colado na logo */
+.navbar-brand {
     display: flex;
     align-items: center;
-    justify-content: center;
-    height: 100vh; /* Ocupa a altura total da tela */
+    gap: 10px; /* Espaço entre a imagem e o texto PROTEGE */
+}
+/* Se a logo da Protege for escura e ficar ruim no fundo preto, 
+   podemos usar este filtro para deixá-la branca: */
+/* .logo-navbar { filter: brightness(0) invert(1); } */
+/* Ajuste da Logo no Menu */
+.logo-menu {
+    max-width: 200px; /* Ajuste conforme o formato da sua logo */
+    height: auto;
+    filter: drop-shadow(0px 4px 4px rgba(0,0,0,0.2)); /* Dá um relevo na logo */
+    padding: 10px 0;
+}
+
+/* Deixa o header do sidebar mais elegante */
+.sidebar-header {
+    padding: 20px 10px;
+    background: #1a252f;
+    border-bottom: 1px solid #34495e;
+}
+/* Se subiu a inadimplência = Vermelho. Se caiu = Verde */
+.variacao-negativa { color: #dc3545 !important; } /* Aumento é ruim */
+.variacao-positiva { color: #198754 !important; } /* Queda é boa */
+
+/* --- Cards de Resumo Ajustados --- */
+.card-resumo {
+    position: relative;
+    overflow: hidden;
+    transition: transform 0.2s;
+    border: none !important;
+    border-radius: 8px;
+    background-color: #ffffff;
+}
+
+.card-resumo:hover {
+    transform: translateY(-3px);
+}
+
+/* Título (Inadimplência Bruta, etc) */
+.card-resumo .text-muted {
+    font-size: 0.65rem !important; /* Menor e mais discreto */
+    letter-spacing: 0.5px;
+    margin-bottom: 5px;
+}
+
+/* Valor Financeiro (O número principal) */
+.card-resumo h3, 
+.card-resumo h4 {
+    font-size: 1.15rem !important; /* Reduzido para não "gritar" na tela */
+    font-weight: 700;
+    color: #212529;
     margin: 0;
 }
 
-.card-login {
-    width: 100%;
-    max-width: 400px;
-    border-top: 5px solid var(--cor-secundaria);
+/* Ícone de fundo (Marca d'água) */
+.icon-card {
+    position: absolute;
+    right: 15px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 1.6rem;
+    /* Altere de 0.1 para 0.2 ou 0.3 */
+    opacity: 0.8 !important; 
 }
+/* Espaçamento interno do card */
+.card-resumo .card-body {
+    padding: 1rem !important;
+}
+/* --- RELATÓRIO DE AGING --- */
 
-.btn-login {
-    background-color: var(--cor-secundaria);
-    color: var(--cor-primaria);
-    font-weight: bold;
+.table-aging thead th {
+    background-color: #212529;
+    color: white;
+    text-transform: uppercase;
+    font-size: 0.85rem;
+    vertical-align: middle;
     border: none;
 }
 
-.btn-login:hover {
-    background-color: #e6b800; /* Um amarelo um pouco mais escuro */
-    color: var(--cor-primaria);
+.table-aging tbody td {
+    font-size: 0.9rem;
+    vertical-align: middle;
+}
+
+/* Cores de Variação (Verde para queda/bom, Vermelho para alta/ruim) */
+.text-negativo { 
+    color: #008d7d !important; 
+    font-weight: bold; 
+} 
+
+.text-positivo { 
+    color: #dc3545 !important; 
+    font-weight: bold; 
+}
+
+/* Estrutura visual da tabela */
+.bg-total-col { 
+    background-color: #f8f9fa; 
+}
+
+.row-variacao { 
+    background-color: #ffffff; 
+    border-top: 2px solid #dee2e6; 
+}
+
+/* Filtros */
+.form-select-custom {
+    max-width: 200px;
+    border-radius: 8px;
 }

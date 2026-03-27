@@ -1,22 +1,56 @@
 /* static/css/global.css */
 
-body {
+/* --- Variáveis e Base --- */
+:root {
+    --cor-primaria: #004a8f; 
+    --cor-secundaria: #ffcd00; 
+    --fundo-pagina: #e9ecef;
+}
+
+body { 
     display: flex;
     flex-direction: column;
     min-height: 100vh;
-    background-color: #f8f9fa; /* Um tom leve de cinza para o fundo */
+    background-color: var(--fundo-pagina); 
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    margin: 0;
 }
 
-main {
-    flex: 1;
+main { flex: 1; }
+
+/* --- Barra de Navegação (Navbar) --- */
+.navbar {
+    background-color: var(--cor-primaria) !important;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    padding: 0.5rem 1rem;
 }
 
 .navbar-brand {
+    font-weight: bold;
+    color: var(--cor-secundaria) !important;
+    display: flex;
+    align-items: center;
+    gap: 10px;
     letter-spacing: 1px;
 }
 
-/* Estilização extra para ícones de dropdown */
+/* AQUI ESTÁ O TRUNFO: Força o tamanho da logo em todas as páginas */
+.logo-navbar {
+    height: 38px !important; /* Tamanho fixo e imutável */
+    width: auto !important;
+    object-fit: contain;
+    display: block;
+}
+
+.nav-link { color: rgba(255,255,255,0.8) !important; }
+.nav-link:hover { color: var(--cor-secundaria) !important; }
+
+/* --- Utilitários de Tabela e Cards --- */
+.variacao-negativa { color: #dc3545 !important; }
+.variacao-positiva { color: #198754 !important; }
+
+/* Dropdown */
 .dropdown-item i {
     margin-right: 10px;
-    color: #0d6efd;
+    color: var(--cor-primaria);
 }

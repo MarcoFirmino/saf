@@ -13,7 +13,7 @@ urlpatterns = [
     # NAVEGAÇÃO
     # =========================================================
     path('', views.index, name='index'),
-    path('dashboard/', views.dashboard, name='dashboard'),
+    
     path('suspensos/', views.suspensos_view, name='suspensos'),
     path('suspensos/editar/<int:id>/', views.editar_suspenso, name='editar_suspenso'), 
     path('contas-receber/', views.relatorio_ar_view, name='relatorio_ar'),
@@ -37,6 +37,7 @@ urlpatterns = [
     path('importar/jur-carga/', views.importar_jur_carga_view, name='importar_jur_carga'),
     path('importar/consolidado/', views.importar_consolidado_view, name='importar_consolidado'),
     path('importar/bd-clientes/', views.importar_bd_clientes_view, name='importar_bd_clientes'),
+    path('aging/', views.aging_view, name='dashboard_aging'),
 
     # =========================================================
     # LIMPEZA DE DADOS
@@ -82,4 +83,6 @@ urlpatterns = [
 
     # ADICIONE ESTA LINHA:
     path('tesouraria/', include('tesouraria.urls')),
+    path('dashboard/', views.dashboard_resumo, name='dashboard_resumo'),
+    path('renegociados/', views.renegociacoes_view, name='renegociados'),
 ]

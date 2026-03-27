@@ -1,8 +1,130 @@
 {% extends 'base.html' %}
+{% load static %}
+{% load humanize %}
+
+{% block title %}Dashboard de Inadimplência | Protege{% endblock %}
+
+{% block extra_css %}
+    <link rel="stylesheet" href="{% static 'analise/style.css' %}">
+{% endblock %}
 
 {% block content %}
-<div class="alert alert-info">
-    <h1><i class="bi bi-speedometer2"></i> Bem-vindo ao Sistema Protege</h1>
-    <p>Selecione uma ferramenta no menu acima para começar.</p>
+<div id="wrapper">
+    <nav id="sidebar">
+        <div class="sidebar-header">
+            <button type="button" id="sidebarCollapse" class="btn btn-sm btn-outline-light mb-3">
+                <i class="bi bi-list"></i>
+            </button>
+            <h6 class="mb-0 text-white small text-uppercase" style="letter-spacing: 1px;">Módulos de Análise</h6>
+        </div>
+
+        <ul class="list-unstyled components">
+            <li class="active">
+                <a href="{% url 'dashboard_resumo' %}">
+                    <i class="bi bi-speedometer2 me-2"></i> Resumo Gerencial
+                </a>
+            </li>
+            <li><a href="{% url 'renegociados' %}"><i class="bi bi-arrow-repeat me-2"></i> Renegociações</a></li>
+            <li><a href="#"><i class="bi bi-box-seam me-2"></i> Aging Pacote</a></li>
+            <li><a href="#"><i class="bi bi-briefcase me-2"></i> Negócio</a></li>
+            <li><a href="#"><i class="bi bi-building me-2"></i> Empresa</a></li>
+            <li class="{% if segmento_ativo == 'aging' %}active{% endif %}">
+            <a href="{% url 'dashboard_aging' %}"><i class="bi bi-clock-history me-2"></i> Aging</a></li>
+            <li><a href="#"><i class="bi bi-gavel me-2"></i> Aging Jurídico</a></li>
+        </ul>
+    </nav>
+
+    <div id="content">
+        <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-2 pb-2 mb-3 border-bottom">
+            <h2 class="h4 fw-bold text-dark mb-0">Resumo de Inadimplência</h2>
+            <div class="btn-toolbar mb-2 mb-md-0">
+                <a href="/admin/analise/resumoinadimplencia/importar-matriz/" class="btn btn-sm btn-outline-primary me-2 shadow-sm">
+                    <i class="bi bi-file-earmark-excel"></i> Importar Matriz
+                </a>
+                <button type="button" class="btn btn-sm btn-primary shadow-sm">
+                    <i class="bi bi-calendar-check"></i> Fechamento Mensal
+                </button>
+            </div>
+        </div>
+
+        <div class="row mb-4 mt-2 g-3">
+            <div class="col-md-4">
+                <div class="card card-resumo border-0 border-start border-primary border-4 shadow-sm h-100">
+                    <div class="card-body">
+                        <div class="text-muted small text-uppercase fw-bold mb-1">Inadimplência Bruta</div>
+                        <h4 class="fw-bold mb-0">
+                            <span class="simbolo-rs">R$</span> {{ resumo.bruta|intcomma }}
+                        </h4>
+                        <i class="bi bi-graph-up-arrow icon-card text-primary"></i>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card card-resumo border-0 border-start border-success border-4 shadow-sm h-100">
+                    <div class="card-body">
+                        <div class="text-muted small text-uppercase fw-bold mb-1 text-success">Inadimplência Líquida</div>
+                        <h4 class="fw-bold mb-0 text-success">
+                            <span class="simbolo-rs">R$</span> {{ resumo.liquida|intcomma }}
+                        </h4>
+                        <i class="bi bi-cash-stack icon-card text-success"></i>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card card-resumo border-0 border-start border-warning border-4 shadow-sm h-100">
+                    <div class="card-body">
+                        <div class="text-muted small text-uppercase fw-bold mb-1 text-warning">Total Renegociado</div>
+                        <h4 class="fw-bold mb-0">
+                            <span class="simbolo-rs">R$</span> {{ resumo.renegociacao|intcomma }}
+                        </h4>
+                        <i class="bi bi-hand-thumbs-up icon-card text-warning"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="table-responsive shadow-sm bg-white rounded">
+            <table class="table table-sm table-hover table-aging mb-0">
+                <thead>
+                    <tr>
+                        <th class="text-start ps-3">Segmento</th>
+                        {% for data in datas %}
+                            <th class="text-center">{{ data|date:"d/m/Y" }}</th>
+                        {% endfor %}
+                        <th class="bg-dark text-white text-center col-variacao">Variação R$</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for linha in linhas %}
+                    <tr class="{% if linha.destaque %}row-destaque-financeiro{% endif %}">
+                        <td class="ps-3 fw-bold">{{ linha.nome }}</td>
+                        
+                        {% for valor in linha.valores %}
+                            <td class="text-end text-valor">{{ valor|intcomma }}</td>
+                        {% endfor %}
+
+                        <td class="text-end fw-bold px-3 text-valor {% if linha.variacao > 0 %}variacao-negativa{% elif linha.variacao < 0 %}variacao-positiva{% endif %}">
+                             {{ linha.variacao|intcomma }}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.addEventListener("DOMContentLoaded", function() {
+        // Lógica para recolher/expandir o menu lateral
+        const sidebar = document.getElementById('sidebar');
+        const sidebarCollapse = document.getElementById('sidebarCollapse');
+
+        sidebarCollapse.addEventListener('click', function() {
+            sidebar.classList.toggle('active');
+        });
+    });
+</script>
 {% endblock %}

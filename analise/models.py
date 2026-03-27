@@ -358,3 +358,139 @@ class ClienteSuspenso(models.Model):
 
     def __str__(self):
         return f"{self.cnpj} - {self.razao_social}"
+
+    # --- MODELO PARA O DASHBOARD DE RESUMO ---
+
+class DashboardIndicador(models.Model):
+    # Categorias para organizar os botões do menu lateral
+    CATEGORIAS = [
+        ('RESUMO', 'Resumo Gerencial'),
+        ('RENEGOCIACAO', 'Renegociações'),
+        ('AGING_PACOTE', 'Aging Pacote'),
+        ('NEGOCIO', 'Negócio'),
+        ('EMPRESA', 'Empresa'),
+        ('AGING', 'Aging'),
+        ('AGING_JURIDICO', 'Aging Jurídico'),
+    ]
+
+    data_referencia = models.DateField(verbose_name="Data da Foto") # Ex: 31/01, 28/02, 10/03
+    categoria_painel = models.CharField(max_length=50, choices=CATEGORIAS, default='RESUMO')
+    
+    # Descrição é o que aparece na primeira coluna (ex: "Logística", "Quebra de Acordo")
+    descricao = models.CharField(max_length=150, verbose_name="Descrição/Métrica")
+    
+    valor = models.DecimalField(max_digits=18, decimal_places=2, verbose_name="Valor R$")
+    percentual = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True, verbose_name="% (se houver)")
+    
+    # Campo para identificar se é fechamento de mês (para não ser excluído)
+    is_final_mes = models.BooleanField(default=False, verbose_name="É fechamento mensal?")
+
+    class Meta:
+        verbose_name = "Dado do Dashboard"
+        verbose_name_plural = "Dados do Dashboard"
+        db_table = "DashboardIndicadores"
+        # Ordena para que as datas mais recentes apareçam primeiro
+        ordering = ['-data_referencia', 'descricao']
+
+    def __str__(self):
+        return f"{self.data_referencia} - {self.descricao}"
+    from django.db import models
+
+class BaseHistoricaRelatorio(models.Model):
+    # --- Campos de Controle do Sistema ---
+    data_geracao = models.DateField(verbose_name="Data da Foto/Extração")
+    aba_origem = models.CharField(max_length=50, verbose_name="Aba de Origem") # Ex: Todos, Renegociados, Jurídico
+
+    # --- Regionalização e Identificação ---
+    regional = models.CharField(max_length=100, verbose_name="Regional", null=True, blank=True)
+    base_operacional = models.CharField(max_length=100, verbose_name="Base Operacional", null=True, blank=True)
+    estabelecimento = models.CharField(max_length=10, verbose_name="Estabelec", null=True, blank=True)
+    
+    # --- Dados do Documento ---
+    especie = models.CharField(max_length=5, verbose_name="Espécie", null=True, blank=True)
+    serie = models.CharField(max_length=10, verbose_name="Série", null=True, blank=True)
+    titulo = models.BigIntegerField(verbose_name="Título", null=True, blank=True)
+    parcela = models.CharField(max_length=5, verbose_name="Parcela", null=True, blank=True)
+    
+    # --- Negócio e Carteira ---
+    unid_negoc = models.CharField(max_length=50, verbose_name="Unid.Negoc", null=True, blank=True)
+    negocio = models.CharField(max_length=100, verbose_name="Negócio", null=True, blank=True)
+    empresa = models.CharField(max_length=10, verbose_name="Empresa", null=True, blank=True)
+    carteira = models.CharField(max_length=10, verbose_name="Carteira", null=True, blank=True)
+    
+    # --- Dados do Cliente ---
+    codigo = models.BigIntegerField(verbose_name="Codigo", null=True, blank=True)
+    pacote = models.CharField(max_length=100, verbose_name="Pacote", null=True, blank=True)
+    cnpj_raiz = models.CharField(max_length=20, verbose_name="Raiz CNPJ", null=True, blank=True)
+    cnpj_cpf = models.CharField(max_length=25, verbose_name="CNPJ/CPF Cliente", null=True, blank=True)
+    razao_agrupada = models.CharField(max_length=255, verbose_name="Razão Agrupada", null=True, blank=True)
+    nome_abrev = models.CharField(max_length=255, verbose_name="Nome Abrev", null=True, blank=True)
+    
+    # --- Datas ---
+    dt_emissao_orig = models.DateField(verbose_name="Dt.Emissão Orig", null=True, blank=True)
+    dt_emissao_ult_ren = models.DateField(verbose_name="Dt.Emissão Últ.Ren", null=True, blank=True)
+    dt_vencto_original = models.DateField(verbose_name="Dt.Vencto Original", null=True, blank=True)
+    dt_vencto_atual = models.DateField(verbose_name="Dt.Vencto Atual", null=True, blank=True)
+    
+    # --- Valores Monetários ---
+    vl_bruto_orig = models.DecimalField(max_digits=18, decimal_places=2, verbose_name="Vl.Bruto Orig.")
+    vl_liquido = models.DecimalField(max_digits=18, decimal_places=2, verbose_name="Vl.líquido")
+    
+    # --- Aging e Status ---
+    dias_atraso = models.IntegerField(verbose_name="Dias em Atraso", default=0)
+    dias_atraso_re = models.IntegerField(verbose_name="Dias em Atraso RE", default=0)
+    aging = models.CharField(max_length=50, verbose_name="Aging", null=True, blank=True)
+    aging_re = models.CharField(max_length=50, verbose_name="Aging RE", null=True, blank=True)
+    status = models.CharField(max_length=100, verbose_name="Status", null=True, blank=True)
+
+    class Meta:
+        db_table = "BaseHistoricaRelatorio"
+        verbose_name = "Registro Histórico de Relatório"
+        verbose_name_plural = "Registros Históricos de Relatório"
+        # Indexar data_geracao e unid_negoc garante que o Dashboard carregue instantaneamente
+        indexes = [
+            models.Index(fields=['data_geracao', 'aba_origem', 'unid_negoc']),
+        ]
+
+    def __str__(self):
+        return f"{self.data_geracao} - {self.nome_abrev} ({self.vl_liquido})"
+
+    # Linha 458
+class ResumoInadimplencia(models.Model):
+    # A partir daqui, aperte TAB ou 4 espaços no início de cada linha:
+        seguimento = models.CharField(max_length=150, verbose_name="Seguimento / Métrica")
+        data = models.DateField(verbose_name="Data de Referência")
+        valor = models.DecimalField(max_digits=18, decimal_places=2, verbose_name="Valor R$")
+        tipo_relatorio = models.CharField(max_length=50, default='GERAL', verbose_name="Tipo de Relatório")
+
+        class Meta:
+            db_table = "ResumoInadimplencia"
+            verbose_name = "Histórico de Resumo"
+            verbose_name_plural = "Histórico de Resumos"
+            ordering = ['data', 'seguimento']
+            unique_together = ['seguimento', 'data', 'tipo_relatorio']
+
+        def __str__(self):
+            return f"{self.data} | {self.seguimento}: {self.valor}"
+
+# No seu models.py
+class DevedorAging(models.Model):
+    # Mudamos de aging_tipo para data_base para suportar a linha "Base-31/01/2026"
+    data_base = models.DateField(verbose_name="Data de Referência", null=True, blank=True)
+    
+    ate_30_dias = models.DecimalField(max_digits=15, decimal_places=2, default=0.00)
+    de_31_a_60_dias = models.DecimalField(max_digits=15, decimal_places=2, default=0.00)
+    de_61_a_90_dias = models.DecimalField(max_digits=15, decimal_places=2, default=0.00)
+    de_91_a_120_dias = models.DecimalField(max_digits=15, decimal_places=2, default=0.00)
+    de_121_a_150_dias = models.DecimalField(max_digits=15, decimal_places=2, default=0.00)
+    de_151_a_180_dias = models.DecimalField(max_digits=15, decimal_places=2, default=0.00)
+    mais_de_180_dias = models.DecimalField(max_digits=15, decimal_places=2, default=0.00)
+    total = models.DecimalField(max_digits=15, decimal_places=2, editable=False, default=0.00)
+
+    def save(self, *args, **kwargs):
+        self.total = (
+            self.ate_30_dias + self.de_31_a_60_dias + self.de_61_a_90_dias +
+            self.de_91_a_120_dias + self.de_121_a_150_dias + 
+            self.de_151_a_180_dias + self.mais_de_180_dias
+        )
+        super().save(*args, **kwargs)

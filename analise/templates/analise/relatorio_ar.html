@@ -1,4 +1,7 @@
 {% extends 'base.html' %}
+{% load static %}
+{% load humanize %}
+
 
 {% block title %}Contas a Receber | Protege{% endblock %}
 
@@ -71,7 +74,7 @@
 
             </div>
             <div class="card-footer bg-light text-center py-3">
-                <a href="{% url 'dashboard' %}" class="text-decoration-none text-secondary">
+                <a href="{% url 'dashboard_resumo' %}" class="text-decoration-none text-secondary">
                     <i class="bi bi-arrow-left"></i> Voltar para Dashboard
                 </a>
             </div>
