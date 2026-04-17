@@ -1,0 +1,130 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h4><i class="bi bi-graph-up-arrow"></i> Gerenciar Resumo de Inadimplência</h4>
+        <div class="d-flex gap-2">
+            <button class="btn btn-success btn-sm" data-bs-toggle="modal" data-bs-target="#modalNovoRegistro">
+                <i class="bi bi-plus-circle"></i> Novo Registro
+            </button>
+            <a href="{% url 'admin:analise_resumoinadimplencia_changelist' %}" class="btn btn-sm btn-outline-secondary">
+                <i class="bi bi-gear"></i> Admin
+            </a>
+        </div>
+    </div>
+
+    <div class="card shadow-sm mb-4 border-0 bg-light">
+        <div class="card-body py-3">
+            <form method="GET" class="row g-3 align-items-end">
+                <div class="col-md-3">
+                    <label class="form-label small text-muted mb-1">Data Específica</label>
+                    <input type="date" name="data" class="form-control form-control-sm" value="{{ data_filtro }}">
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label small text-muted mb-1">Segmento</label>
+                    <input type="text" name="seguimento" class="form-control form-control-sm" value="{{ seguimento_filtro }}" placeholder="Ex: Varejo, Corporate...">
+                </div>
+                <div class="col-md-3">
+                    <button type="submit" class="btn btn-primary btn-sm me-2"><i class="bi bi-search"></i> Filtrar</button>
+                    <a href="{% url 'gerenciar_resumo' %}" class="btn btn-outline-secondary btn-sm">Limpar</a>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="card shadow-sm border-0">
+        <div class="table-responsive">
+            <table class="table table-sm table-hover align-middle mb-0">
+                <thead class="table-dark">
+                    <tr>
+                        <th style="width: 120px;">Data</th>
+                        <th>Segmento</th>
+                        <th style="width: 150px;">Valor</th>
+                        <th style="width: 150px;">Tipo</th>
+                        <th class="text-center" style="width: 80px;">Ações</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in page_obj %}
+                    <tr id="row-{{ item.pk }}">
+                        <td contenteditable="true" class="editavel font-monospace" data-id="{{ item.pk }}" data-campo="data" title="Formato DD/MM/AAAA">
+                            {{ item.data|date:"d/m/Y" }}
+                        </td>
+                        <td contenteditable="true" class="editavel fw-bold" data-id="{{ item.pk }}" data-campo="seguimento">{{ item.seguimento }}</td>
+                        <td contenteditable="true" class="editavel text-end" data-id="{{ item.pk }}" data-campo="valor">{{ item.valor }}</td>
+                        <td contenteditable="true" class="editavel badge-cell" data-id="{{ item.pk }}" data-campo="tipo_relatorio">{{ item.tipo_relatorio }}</td>
+                        <td class="text-center">
+                           <button class="btn btn-link text-danger p-0 btn-excluir" data-id="{{ item.pk }}">
+                                <i class="bi bi-trash3"></i>
+                            </button>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="5" class="text-center p-4 text-muted">Nenhum registro encontrado.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <nav class="mt-4">
+        <ul class="pagination justify-content-center pagination-sm">
+            {% if page_obj.has_previous %}
+                <li class="page-item"><a class="page-link" href="?page=1{% if data_filtro %}&data={{ data_filtro }}{% endif %}{% if seguimento_filtro %}&seguimento={{ seguimento_filtro }}{% endif %}">&laquo;</a></li>
+                <li class="page-item"><a class="page-link" href="?page={{ page_obj.previous_page_number }}{% if data_filtro %}&data={{ data_filtro }}{% endif %}{% if seguimento_filtro %}&seguimento={{ seguimento_filtro }}{% endif %}">Anterior</a></li>
+            {% endif %}
+            
+            <li class="page-item disabled"><span class="page-link">Pág {{ page_obj.number }} de {{ page_obj.paginator.num_pages }}</span></li>
+            
+            {% if page_obj.has_next %}
+                <li class="page-item"><a class="page-link" href="?page={{ page_obj.next_page_number }}{% if data_filtro %}&data={{ data_filtro }}{% endif %}{% if seguimento_filtro %}&seguimento={{ seguimento_filtro }}{% endif %}">Próxima</a></li>
+            {% endif %}
+        </ul>
+    </nav>
+</div>
+
+<div class="modal fade" id="modalNovoRegistro" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Adicionar Novo Registro</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="formNovoRegistro">
+                    <div class="mb-3">
+                        <label class="form-label">Data</label>
+                        <input type="date" id="novaData" class="form-control" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Segmento</label>
+                        <input type="text" id="novoSeguimento" class="form-control" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Valor Liquido</label>
+                        <input type="text" id="novoValor" class="form-control" placeholder="0.00" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Tipo Relatório</label>
+                        <input type="text" id="novoTipo" class="form-control" value="Resumo" required>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-success" id="btnSalvarNovo">Salvar Registro</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    window.AppConfig = {
+        csrfToken: "{{ csrf_token }}",
+        apiAcaoUrl: "{% url 'api_resumo_acao' %}"
+    };
+</script>
+<script src="{% static 'js/gerenciar_resumo.js' %}?v=1"></script>
+{% endblock %}

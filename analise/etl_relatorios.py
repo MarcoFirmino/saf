@@ -1,7 +1,7 @@
 import pandas as pd
 from decimal import Decimal
 from django.db import transaction
-from .models import BaseHistoricaRelatorio, ResumoInadimplencia, DevedorAging
+from .models import BaseHistoricaRelatorio, ResumoInadimplencia, DevedorAging, CreditoNaoDestinado
 from datetime import datetime
 
 def clean_val(val, default=""):
@@ -148,3 +148,52 @@ def popular_banco_relatorio(df_todos, df_renegociados, df_juridico, data_corte_s
             ResumoInadimplencia.objects.bulk_create(objetos_resumo)
 
     return True
+
+
+def processar_planilha_creditos(arquivo):
+    df = pd.read_excel(arquivo)
+    
+    # Normalizar nomes das colunas (remover espaços e colocar em minúsculo)
+    # Ajuste aqui caso os nomes na planilha sejam exatamente diferentes
+    df.columns = [str(c).strip().upper() for c in df.columns]
+    
+    contador_sucesso = 0
+    erros = []
+
+    for index, row in df.iterrows():
+        try:
+            dni_val = str(row.get('DNI', '')).strip()
+            if not dni_val or dni_val.lower() == 'nan':
+                continue
+
+            # Conversão de valores monetários
+            def to_decimal(val):
+                if pd.isna(val): return Decimal('0.00')
+                return Decimal(str(val)).quantize(Decimal('0.00'))
+
+            credito_total = to_decimal(row.get('CRÉDITO', 0))
+            debitos_iniciais = to_decimal(row.get('DÉBITOS', 0))
+            
+            # O Saldo Final é calculado para garantir integridade
+            saldo_calc = credito_total - debitos_iniciais
+
+            # Criar ou Atualizar baseado no DNI
+            obj, created = CreditoNaoDestinado.objects.update_or_create(
+                dni=dni_val,
+                defaults={
+                    'data': pd.to_datetime(row.get('DATA')).date(),
+                    'estab': int(row.get('ESTAB', 0)),
+                    'credito': credito_total,
+                    'debitos': debitos_iniciais,
+                    'saldo_final': saldo_calc,
+                    'cliente': str(row.get('CLIENTE', ''))[:150],
+                    'banco': str(row.get('BANCO', ''))[:5],
+                    'empresa': str(row.get('EMPRESA', ''))[:15],
+                }
+            )
+            contador_sucesso += 1
+        except Exception as e:
+            erros.append(f"Erro na linha {index + 2}: {str(e)}")
+
+    return contador_sucesso, erros
+

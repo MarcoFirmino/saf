@@ -19,6 +19,9 @@ from .models import (
     BaseGeral,
     ResumoInadimplencia,
     DevedorAging,
+    CreditoNaoDestinado, 
+    HistoricoAbatimento, 
+    HistoricoContato
     
 )
 @admin.register(CodigoIgnorado)
@@ -231,6 +234,7 @@ class DevedorAgingResource(resources.ModelResource):
 # 2. Configuração do Admin
 @admin.register(DevedorAging)
 class DevedorAgingAdmin(ImportExportModelAdmin):
+
     resource_class = DevedorAgingResource
     
     # Exibição das colunas financeiras lado a lado
@@ -266,3 +270,39 @@ class DevedorAgingAdmin(ImportExportModelAdmin):
             'description': 'O total é calculado automaticamente na gravação.'
         }),
     )
+
+# ==========================================
+# INLINES (Tabelas embutidas)
+# ==========================================
+class HistoricoAbatimentoInline(admin.TabularInline):
+    model = HistoricoAbatimento
+    extra = 0 # Não cria linhas extras vazias por padrão
+    readonly_fields = ('data_abatimento',)
+
+class HistoricoContatoInline(admin.TabularInline):
+    model = HistoricoContato
+    extra = 0
+    readonly_fields = ('data_contato',)
+
+# ==========================================
+# REGISTROS NO ADMIN
+# ==========================================
+@admin.register(CreditoNaoDestinado)
+class CreditoNaoDestinadoAdmin(admin.ModelAdmin):
+    list_display = ('dni', 'data', 'cliente', 'empresa', 'credito', 'debitos', 'saldo_final')
+    search_fields = ('dni', 'cliente', 'empresa')
+    list_filter = ('empresa', 'banco', 'data')
+    readonly_fields = ('saldo_final',) # O saldo é calculado automaticamente, não deve ser editado manualmente
+    inlines = [HistoricoContatoInline, HistoricoAbatimentoInline]
+
+@admin.register(HistoricoAbatimento)
+class HistoricoAbatimentoAdmin(admin.ModelAdmin):
+    list_display = ('credito_origem', 'data_abatimento', 'valor', 'usuario')
+    search_fields = ('credito_origem__dni', 'observacao')
+    list_filter = ('data_abatimento', 'usuario')
+
+@admin.register(HistoricoContato)
+class HistoricoContatoAdmin(admin.ModelAdmin):
+    list_display = ('credito_origem', 'data_contato', 'usuario')
+    search_fields = ('credito_origem__dni', 'anotacao')
+    list_filter = ('data_contato', 'usuario')

@@ -1,0 +1,91 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h4><i class="bi bi-wallet2 text-primary"></i> Controle de Créditos Não Destinados</h4>
+        
+        <div>
+            <a href="{% url 'exportar_creditos_excel' %}" class="btn btn-outline-primary shadow-sm me-2">
+                <i class="bi bi-file-earmark-spreadsheet"></i> Exportar Excel
+            </a>
+
+            {% if user.is_superuser %}
+            <a href="{% url 'importar_creditos' %}" class="btn btn-success shadow-sm">
+                <i class="bi bi-file-earmark-excel"></i> Importar Planilha
+            </a>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="card shadow-sm mb-4 border-0">
+        <div class="card-body bg-light rounded">
+            <form method="GET" class="row g-3 align-items-end">
+                <div class="col-md-2">
+                    <label class="form-label text-muted small fw-bold"><i class="bi bi-upc-scan"></i> DNI</label>
+                    <input type="text" name="dni" class="form-control" value="{{ f_dni }}" placeholder="Ex: dni123...">
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label text-muted small fw-bold"><i class="bi bi-calendar3"></i> Data</label>
+                    <input type="date" name="data" class="form-control" value="{{ f_data }}">
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label text-muted small fw-bold"><i class="bi bi-person"></i> Cliente</label>
+                    <input type="text" name="cliente" class="form-control" value="{{ f_cliente }}" placeholder="Parte do nome...">
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label text-muted small fw-bold"><i class="bi bi-building"></i> Empresa</label>
+                    <input type="text" name="empresa" class="form-control" value="{{ f_empresa }}" placeholder="Nome da empresa">
+                </div>
+                <div class="col-md-2 d-flex gap-2">
+                    <button type="submit" class="btn btn-primary w-100"><i class="bi bi-search"></i> Filtrar</button>
+                    <a href="{% url 'listar_creditos' %}" class="btn btn-outline-secondary w-100">Limpar</a>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <div class="card shadow-sm border-0">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-dark">
+                    <tr>
+                        <th>DNI</th>
+                        <th>Data</th>
+                        <th>Cliente</th>
+                        <th>Empresa</th>
+                        <th class="text-end">Crédito</th>
+                        <th class="text-end">Saldo Final</th>
+                        <th class="text-center">Ações</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in creditos %}
+                    <tr>
+                        <td class="fw-bold">{{ item.dni }}</td>
+                        <td>{{ item.data|date:"d/m/Y" }}</td>
+                        <td>{{ item.cliente|truncatechars:40 }}</td>
+                        <td>{{ item.empresa }}</td>
+                        <td class="text-end text-success">R$ {{ item.credito }}</td>
+                        <td class="text-end fw-bold {% if item.saldo_final > 0 %}text-primary{% else %}text-muted{% endif %}">
+                            R$ {{ item.saldo_final }}
+                        </td>
+                        <td class="text-center">
+                            <a href="{% url 'detalhe_credito' item.dni %}" class="btn btn-sm btn-outline-primary">
+                                Gerenciar <i class="bi bi-arrow-right-short"></i>
+                            </a>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="7" class="text-center p-5 text-muted">
+                            <i class="bi bi-search fs-1"></i><br>
+                            Nenhum crédito encontrado com esses filtros.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

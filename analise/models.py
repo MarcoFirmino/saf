@@ -1,4 +1,5 @@
 from django.db import models
+from django.db.models import Sum
 from django.contrib.auth.models import User
 from django.db.models.signals import post_save
 from django.dispatch import receiver
@@ -456,6 +457,7 @@ class BaseHistoricaRelatorio(models.Model):
         return f"{self.data_geracao} - {self.nome_abrev} ({self.vl_liquido})"
 
     # Linha 458
+
 class ResumoInadimplencia(models.Model):
     # A partir daqui, aperte TAB ou 4 espaços no início de cada linha:
         seguimento = models.CharField(max_length=150, verbose_name="Seguimento / Métrica")
@@ -494,3 +496,60 @@ class DevedorAging(models.Model):
             self.de_151_a_180_dias + self.mais_de_180_dias
         )
         super().save(*args, **kwargs)
+
+class CreditoNaoDestinado(models.Model):
+    # DNI será a chave primária e o controle único
+    dni = models.CharField(max_length=15, primary_key=True, verbose_name="DNI")
+    data = models.DateField(verbose_name="Data")
+    estab = models.IntegerField(verbose_name="Estabelecimento")
+    
+    # Valores
+    credito = models.DecimalField(max_digits=15, decimal_places=2, default=0.00, verbose_name="Crédito")
+    debitos = models.DecimalField(max_digits=15, decimal_places=2, default=0.00, verbose_name="Débitos")
+    saldo_final = models.DecimalField(max_digits=15, decimal_places=2, default=0.00, verbose_name="Saldo Final")
+    
+    # Informações do Cliente
+    cliente = models.CharField(max_length=150, verbose_name="Cliente")
+    banco = models.CharField(max_length=5, verbose_name="Banco")
+    empresa = models.CharField(max_length=15, verbose_name="Empresa")
+
+    def atualizar_saldo(self):
+        """ Recalcula o saldo final baseado nos abatimentos registrados """
+        total_abatido = self.abatimentos.aggregate(total=Sum('valor'))['total'] or 0
+        
+        # O Débito total será o que já veio da planilha + os novos abatimentos
+        self.debitos = total_abatido
+        self.saldo_final = self.credito - self.debitos
+        self.save()
+
+    def __str__(self):
+        return f"{self.dni} - {self.cliente}"
+
+
+class HistoricoAbatimento(models.Model):
+    credito_origem = models.ForeignKey(CreditoNaoDestinado, on_delete=models.CASCADE, related_name='abatimentos')
+    data_abatimento = models.DateField(auto_now_add=True)
+    valor = models.DecimalField(max_digits=15, decimal_places=2)
+    observacao = models.TextField(verbose_name="Como e onde foi abatido/devolvido")
+    usuario = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
+
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        # Atualiza o saldo do crédito pai toda vez que salvar um abatimento
+        self.credito_origem.atualizar_saldo()
+
+    def delete(self, *args, **kwargs):
+        pai = self.credito_origem
+        super().delete(*args, **kwargs)
+        # Atualiza o saldo se um abatimento for deletado
+        pai.atualizar_saldo()
+
+
+class HistoricoContato(models.Model):
+    credito_origem = models.ForeignKey(CreditoNaoDestinado, on_delete=models.CASCADE, related_name='contatos')
+    data_contato = models.DateTimeField(auto_now_add=True)
+    anotacao = models.TextField(verbose_name="Histórico do Contato")
+    usuario = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
+
+    class Meta:
+        ordering = ['-data_contato'] # Mais recentes primeiro

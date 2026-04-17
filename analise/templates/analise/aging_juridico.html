@@ -1,0 +1,131 @@
+{% extends 'base.html' %}
+{% load static %}
+{% load humanize %}
+
+{% block title %}Aging Jurídico | Protege{% endblock %}
+
+{% block extra_css %}
+    <link rel="stylesheet" href="{% static 'analise/style.css' %}">
+{% endblock %}
+
+{% block content %}
+<div id="wrapper">
+    {% include 'includes/sidebar.html' %} 
+
+    <div id="content">
+        <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-2 pb-2 mb-3 border-bottom">
+            <h2 class="h4 fw-bold text-dark mb-0">Carteira Jurídica (Recuperação Judicial)</h2>
+            <div class="btn-toolbar mb-2 mb-md-0">
+                {% if data_ref %}
+                    <span class="badge bg-secondary fs-6 shadow-sm"><i class="bi bi-calendar-check me-2"></i> Data Base: {{ data_ref|date:"d/m/Y" }}</span>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="row mb-4 mt-2 g-3">
+            <div class="col-md-4">
+                <div class="card card-resumo border-0 border-start border-primary border-4 shadow-sm h-100">
+                    <div class="card-body">
+                        <div class="text-muted small text-uppercase fw-bold mb-1">Total Jurídico</div>
+                        <h4 class="fw-bold mb-0">
+                            <span class="simbolo-rs">R$</span> {{ card_total|default:0|floatformat:"2g" }}
+                        </h4>
+                        <i class="bi bi-bank icon-card text-primary"></i>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card card-resumo border-0 border-start border-danger border-4 shadow-sm h-100">
+                    <div class="card-body">
+                        <div class="text-muted small text-uppercase fw-bold mb-1 text-danger">Total Vencido (> 0 dias)</div>
+                        <h4 class="fw-bold mb-0 text-danger">
+                            <span class="simbolo-rs">R$</span> {{ card_vencido|default:0|floatformat:"2g" }}
+                        </h4>
+                        <i class="bi bi-exclamation-octagon icon-card text-danger"></i>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card card-resumo border-0 border-start border-success border-4 shadow-sm h-100">
+                    <div class="card-body">
+                        <div class="text-muted small text-uppercase fw-bold mb-1 text-success">A Vencer</div>
+                        <h4 class="fw-bold mb-0 text-success">
+                            <span class="simbolo-rs">R$</span> {{ card_vencer|default:0|floatformat:"2g" }}
+                        </h4>
+                        <i class="bi bi-calendar2-check icon-card text-success"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-body bg-white rounded">
+                <form method="GET" class="row g-3">
+                    <div class="col-md-4">
+                        <label class="form-label fw-bold text-muted small">Negócio</label>
+                        <select name="negocio" class="form-select form-select-sm" onchange="this.form.submit()">
+                            <option value="">Todos os Negócios</option>
+                            {% for op in lista_negocio %}
+                                <option value="{{ op }}" {% if f_negocio == op %}selected{% endif %}>{{ op }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label fw-bold text-muted small">Empresa</label>
+                        <select name="empresa" class="form-select form-select-sm" onchange="this.form.submit()">
+                            <option value="">Todas as Empresas</option>
+                            {% for op in lista_empresa %}
+                                <option value="{{ op }}" {% if f_empresa == op %}selected{% endif %}>{{ op }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-4 d-flex align-items-end">
+                        <a href="{% url 'aging_juridico' %}" class="btn btn-sm btn-outline-danger w-100">Limpar Filtros</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <div class="table-responsive shadow-sm bg-white rounded">
+            {% if vazio %}
+                <div class="alert alert-warning text-center m-3 shadow-sm">
+                    <i class="bi bi-info-circle-fill"></i> Nenhuma conta jurídica encontrada para os filtros selecionados.
+                </div>
+            {% else %}
+                <table class="table table-sm table-hover table-striped mb-0 align-middle">
+                    <thead class="table-dark">
+                        <tr>
+                            <th class="text-start ps-3">Cliente (Nome Abrev)</th>
+                            {% for col in colunas_aging %}
+                                <th class="text-end">{{ col }}</th>
+                            {% endfor %}
+                            <th class="text-end fw-bold pe-3">Total Geral</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for linha in linhas %}
+                        <tr>
+                            <td class="fw-bold text-secondary ps-3">{{ linha.cliente }}</td>
+                            {% for valor in linha.valores %}
+                                <td class="text-end">{% if valor > 0 %}{{ valor|floatformat:"2g" }}{% else %}-{% endif %}</td>
+                            {% endfor %}
+                            <td class="text-end fw-bold pe-3">{{ linha.total|floatformat:"2g" }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                    <tfoot class="table-secondary fw-bold">
+                        <tr>
+                            <td class="ps-3">Total Geral</td>
+                            {% for total_col in totais_rodape %}
+                                <td class="text-end">{{ total_col|floatformat:"2g" }}</td>
+                            {% endfor %}
+                            <td class="text-end text-primary fs-5 pe-3">{{ total_geral_tabela|floatformat:"2g" }}</td>
+                        </tr>
+                    </tfoot>
+                </table>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
+

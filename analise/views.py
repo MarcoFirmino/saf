@@ -1,6 +1,11 @@
 
 import pandas as pd
 import numpy as np
+from django.core.paginator import Paginator
+from django.http import JsonResponse
+from django.views.decorators.http import require_POST
+import json
+from django.db.models import Q
 from datetime import datetime
 from decimal import Decimal, ROUND_HALF_UP
 from .services import processar_geral_pandas # <--- Certifique-se de importar
@@ -12,6 +17,7 @@ from django.contrib import messages
 from django.db import transaction
 from django.db.models import Max, Sum
 import unicodedata
+from .etl_relatorios import processar_planilha_creditos
 import re
 from .forms import UploadSuspensosForm, EditarSuspensoForm
 from .processador import processar_suspensos_db
@@ -24,7 +30,10 @@ from .models import (
     ClienteSuspenso,
     ResumoInadimplencia,
     DevedorAging,
-    BaseHistoricaRelatorio
+    BaseHistoricaRelatorio,
+    CreditoNaoDestinado, 
+    HistoricoAbatimento, 
+    HistoricoContato
 )
 
 
@@ -825,7 +834,8 @@ def dashboard_resumo(request):
                 'destaque': nome in ['Inadimplência Total - Bruta', 'Inadimplência Total - Líquida', 'Total de Renegociações']
             } for nome, row in df_final.iterrows()
         ],
-        'resumo': resumo_kpi
+        'resumo': resumo_kpi,
+        'segmento_ativo': 'resumo'
     }
     return render(request, 'analise/dashboard.html', contexto)
     # =========================================================
@@ -967,6 +977,7 @@ def renegociacoes_view(request):
         'f_pacote': f_pacote,
         'f_negocio': f_negocio,
         'data_ref': ultima_data,
+        'segmento_ativo': 'renegociados',
         
         # Variáveis dos Cards
         'card_quebra': total_quebra,
@@ -975,3 +986,398 @@ def renegociacoes_view(request):
     }
     
     return render(request, 'analise/renegociados.html', context)
+    # ==========================================
+    # Aging jurídico
+    # ==========================================
+@login_required
+def aging_juridico_view(request):
+    ultima_data = BaseHistoricaRelatorio.objects.filter(aba_origem='Jurídico').aggregate(Max('data_geracao'))['data_geracao__max']
+    
+    if not ultima_data:
+        return render(request, 'analise/aging_juridico.html', {'vazio': True, 'segmento_ativo': 'aging_juridico'})
+        
+    # Filtra apenas a aba Jurídico da última foto
+    qs = BaseHistoricaRelatorio.objects.filter(data_geracao=ultima_data, aba_origem='Jurídico')
+    
+    # Captura filtros do formulário
+    f_negocio = request.GET.get('negocio', '')
+    f_empresa = request.GET.get('empresa', '')
+    
+    if f_negocio: qs = qs.filter(negocio=f_negocio)
+    if f_empresa: qs = qs.filter(empresa=f_empresa)
+    
+    # Opções para os Selects
+    opcoes_base = BaseHistoricaRelatorio.objects.filter(data_geracao=ultima_data, aba_origem='Jurídico')
+    lista_negocio = opcoes_base.exclude(negocio__isnull=True).exclude(negocio='').values_list('negocio', flat=True).distinct().order_by('negocio')
+    lista_empresa = opcoes_base.exclude(empresa__isnull=True).exclude(empresa='').values_list('empresa', flat=True).distinct().order_by('empresa')
+    
+    # ==========================================
+    # CÁLCULOS PARA OS CARDS
+    # ==========================================
+    total_geral = qs.aggregate(Sum('vl_liquido'))['vl_liquido__sum'] or Decimal('0.00')
+    total_vencer = qs.filter(aging='A VENCER').aggregate(Sum('vl_liquido'))['vl_liquido__sum'] or Decimal('0.00')
+    total_vencido = total_geral - total_vencer
+
+    # ==========================================
+    # PROCESSAMENTO PANDAS (PIVOT TABLE)
+    # ==========================================
+    df = pd.DataFrame(list(qs.values('nome_abrev', 'aging', 'vl_liquido')))
+    
+    if df.empty:
+        return render(request, 'analise/aging_juridico.html', {
+            'vazio': True, 'lista_negocio': lista_negocio, 'lista_empresa': lista_empresa,
+            'card_total': total_geral, 'card_vencer': total_vencer, 'card_vencido': total_vencido,
+            'segmento_ativo': 'aging_juridico'
+        })
+        
+    # Define a ordem exata das colunas de Aging para não ficar bagunçado (alfabético)
+    ordem_aging = [
+        "A VENCER", "Até 30 dias", "31 a 60 dias", "61 a 90 dias", 
+        "91 a 120 dias", "121 a 150 dias", "151 a 180 dias", "Mais de 180 dias"
+    ]
+    
+    # Cria a Tabela Dinâmica
+    pivot = df.pivot_table(index='nome_abrev', columns='aging', values='vl_liquido', aggfunc='sum', fill_value=0)
+    pivot['Total'] = pivot.sum(axis=1)
+    pivot = pivot.sort_values(by='Total', ascending=False)
+    
+    # Mantém apenas as colunas que têm dados, mas respeitando a nossa ordem lógica
+    colunas_presentes = [col for col in ordem_aging if col in pivot.columns]
+    totais_colunas = pivot.sum(axis=0)
+    
+    linhas = []
+    for cliente, row in pivot.iterrows():
+        linhas.append({
+            'cliente': cliente,
+            'valores': [row[col] for col in colunas_presentes],
+            'total': row['Total']
+        })
+        
+    context = {
+        'colunas_aging': colunas_presentes,
+        'linhas': linhas,
+        'totais_rodape': [totais_colunas[col] for col in colunas_presentes],
+        'total_geral_tabela': totais_colunas['Total'],
+        
+        'lista_negocio': lista_negocio,
+        'lista_empresa': lista_empresa,
+        'f_negocio': f_negocio,
+        'f_empresa': f_empresa,
+        'data_ref': ultima_data,
+        
+        'card_total': total_geral,
+        'card_vencer': total_vencer,
+        'card_vencido': total_vencido,
+        'segmento_ativo': 'aging_juridico' # Importante para acender o botão no menu
+    }
+    
+    return render(request, 'analise/aging_juridico.html', context)
+
+
+@login_required
+def gerenciar_resumo(request):
+    if not request.user.is_superuser:
+        return redirect('dashboard_resumo')
+
+    queryset = ResumoInadimplencia.objects.all().order_by('-data', 'seguimento')
+    
+    # Capturando filtros da URL
+    data_filtro = request.GET.get('data', '')
+    seguimento_filtro = request.GET.get('seguimento', '')
+
+    # Aplicando os filtros (se existirem)
+    if data_filtro:
+        queryset = queryset.filter(data=data_filtro)
+    if seguimento_filtro:
+        queryset = queryset.filter(seguimento__icontains=seguimento_filtro)
+
+    paginator = Paginator(queryset, 50)
+    page_number = request.GET.get('page')
+    page_obj = paginator.get_page(page_number)
+
+    return render(request, 'analise/gerenciar_resumo.html', {
+        'page_obj': page_obj,
+        'data_filtro': data_filtro,
+        'seguimento_filtro': seguimento_filtro
+    })
+
+@login_required
+@require_POST
+def api_resumo_acao(request):
+    if not request.user.is_superuser:
+        return JsonResponse({'status': 'erro', 'message': 'Não autorizado'}, status=403)
+
+    try:
+        data = json.loads(request.body)
+        acao = data.get('acao')
+
+        if acao == 'criar':
+            valor_novo = str(data.get('valor', '0')).replace(',', '.')
+            nova_linha = ResumoInadimplencia(
+                data=data.get('data'), # O input type="date" envia em YYYY-MM-DD nativamente
+                seguimento=data.get('seguimento'),
+                valor=valor_novo,
+                tipo_relatorio=data.get('tipo_relatorio', 'Resumo')
+            )
+            nova_linha.full_clean()
+            nova_linha.save()
+            return JsonResponse({'status': 'sucesso', 'id': nova_linha.pk})
+
+        # Para edição e exclusão, precisamos do ID
+        pk = data.get('id')
+        instancia = get_object_or_404(ResumoInadimplencia, pk=pk)
+
+        if acao == 'excluir':
+            instancia.delete()
+            return JsonResponse({'status': 'sucesso'})
+
+        elif acao == 'editar':
+            campo = data.get('campo')
+            valor = data.get('valor').strip()
+
+            if campo == 'valor':
+                valor = valor.replace(',', '.')
+            
+            # Tratamento de Data BR para salvar no banco
+            if campo == 'data' and '/' in valor:
+                try:
+                    valor = datetime.strptime(valor, '%d/%m/%Y').date()
+                except ValueError:
+                    return JsonResponse({'status': 'erro', 'message': 'Formato de data inválido. Use DD/MM/AAAA'}, status=400)
+            
+            setattr(instancia, campo, valor)
+            instancia.full_clean()
+            instancia.save()
+            return JsonResponse({'status': 'sucesso'})
+
+    except Exception as e:
+        return JsonResponse({'status': 'erro', 'message': str(e)}, status=400)
+
+@login_required
+def gerenciar_base_geral(request):
+    if not request.user.is_superuser:
+        messages.error(request, "Acesso negado.")
+        return redirect('dashboard_resumo')
+
+    # Buscamos todos os registros da BaseGeral
+    queryset = BaseGeral.objects.all().order_by('-data_importacao', 'id')
+    
+    # Paginação: 50 registros por vez para não travar o browser
+    paginator = Paginator(queryset, 50)
+    page_number = request.GET.get('page')
+    page_obj = paginator.get_page(page_number)
+
+    return render(request, 'analise/gerenciar_base.html', {'page_obj': page_obj})
+
+@login_required
+@require_POST
+def api_base_geral_acao(request):
+    """ Endpoint para salvar edições ou excluir via AJAX """
+    if not request.user.is_superuser:
+        return JsonResponse({'status': 'erro', 'message': 'Não autorizado'}, status=403)
+
+    try:
+        data = json.loads(request.body)
+        acao = data.get('acao')
+        pk = data.get('id')
+        instancia = get_object_or_404(BaseGeral, pk=pk)
+
+        if acao == 'excluir':
+            instancia.delete()
+            return JsonResponse({'status': 'sucesso'})
+
+        elif acao == 'editar':
+            # Mapeamento dinâmico dos campos enviados
+            campo = data.get('campo')
+            valor = data.get('valor')
+            
+            # Tratamento básico para campos numéricos ou de data se necessário
+            # Aqui usamos setattr para atualizar qualquer campo enviado pelo JS
+            setattr(instancia, campo, valor)
+            instancia.save()
+            return JsonResponse({'status': 'sucesso'})
+
+    except Exception as e:
+        return JsonResponse({'status': 'erro', 'message': str(e)}, status=400) 
+    
+
+@login_required
+def listar_creditos(request):
+    # Lista apenas os que têm saldo a devolver. Se quiser listar todos, tire o filtro.
+    creditos = CreditoNaoDestinado.objects.filter(saldo_final__gt=0).order_by('data')
+    return render(request, 'analise/listar_creditos.html', {'creditos': creditos})
+
+@login_required
+def detalhe_credito(request, dni):
+    credito = get_object_or_404(CreditoNaoDestinado, dni=dni)
+    
+    if request.method == 'POST':
+        acao = request.POST.get('acao')
+        
+        # Adicionando um novo Contato
+        if acao == 'novo_contato':
+            anotacao = request.POST.get('anotacao')
+            HistoricoContato.objects.create(
+                credito_origem=credito,
+                anotacao=anotacao,
+                usuario=request.user
+            )
+            messages.success(request, "Contato registrado com sucesso!")
+            
+       # Adicionando um novo Abatimento
+        elif acao == 'novo_abatimento':
+            valor_digitado = request.POST.get('valor', '0')
+            
+            # TRUQUE AQUI: Remove os pontos de milhar e troca a vírgula decimal por ponto
+            valor_limpo = valor_digitado.replace('.', '').replace(',', '.')
+            
+            observacao = request.POST.get('observacao')
+            
+            try:
+                valor_float = float(valor_limpo)
+                if valor_float > credito.saldo_final:
+                    messages.error(request, "O valor do abatimento não pode ser maior que o Saldo Final!")
+                elif valor_float <= 0:
+                    messages.error(request, "O valor do abatimento deve ser maior que zero!")
+                else:
+                    HistoricoAbatimento.objects.create(
+                        credito_origem=credito,
+                        valor=valor_float,
+                        observacao=observacao,
+                        usuario=request.user
+                    )
+                    messages.success(request, "Abatimento registrado e saldo atualizado!")
+            except ValueError:
+                messages.error(request, "Valor inválido para abatimento. Use o formato 21.000,00 ou 21000,00")
+        
+        # EXCLUIR CONTATO
+        elif acao == 'excluir_contato':
+            contato_id = request.POST.get('contato_id')
+            contato = get_object_or_404(HistoricoContato, id=contato_id, credito_origem=credito)
+            contato.delete()
+            messages.success(request, "Contato excluído com sucesso!")
+
+        # EXCLUIR ABATIMENTO
+        elif acao == 'excluir_abatimento':
+            abatimento_id = request.POST.get('abatimento_id')
+            abatimento = get_object_or_404(HistoricoAbatimento, id=abatimento_id, credito_origem=credito)
+            abatimento.delete() # Isso já dispara a função que recalcula o saldo do DNI!
+            messages.success(request, "Abatimento excluído. O saldo retornou ao DNI com sucesso!")
+                
+        return redirect('detalhe_credito', dni=dni)
+
+    return render(request, 'analise/detalhe_credito.html', {'credito': credito})
+
+@login_required
+def importar_creditos_view(request):
+    if not request.user.is_superuser:
+        return redirect('dashboard_resumo')
+
+    if request.method == 'POST' and request.FILES.get('planilha'):
+        arquivo = request.FILES['planilha']
+        sucesso, erros = processar_planilha_creditos(arquivo)
+        
+        if sucesso > 0:
+            messages.success(request, f"Importação concluída! {sucesso} registros processados.")
+        if erros:
+            for erro in erros:
+                messages.warning(request, erro)
+        
+        return redirect('listar_creditos')
+
+    return render(request, 'analise/importar_creditos.html')
+
+import pandas as pd
+from django.http import HttpResponse
+from .models import CreditoNaoDestinado, HistoricoAbatimento, HistoricoContato
+
+@login_required
+def exportar_creditos_excel(request):
+    # Função auxiliar para formatar moeda em PT-BR (Ex: 21000.50 -> 21.000,50)
+    def formatar_moeda_br(valor):
+        if valor is None: return "0,00"
+        return f'{valor:,.2f}'.replace(',', 'X').replace('.', ',').replace('X', '.')
+
+    # --- 1. Aba PRINCIPAL (Créditos) ---
+    creditos = CreditoNaoDestinado.objects.all().values(
+        'dni', 'data', 'estab', 'cliente', 'empresa', 'banco', 'credito', 'debitos', 'saldo_final'
+    )
+    df_creditos = pd.DataFrame(list(creditos))
+    
+    if not df_creditos.empty:
+        df_creditos.columns = ['DNI', 'Data Origem', 'Estab', 'Cliente', 'Empresa', 'Banco', 'Crédito Original', 'Total Débitos', 'Saldo Final']
+        
+        # Formata Data
+        df_creditos['Data Origem'] = pd.to_datetime(df_creditos['Data Origem']).dt.strftime('%d/%m/%Y')
+        
+        # Formata Valores (Moeda BR)
+        df_creditos['Crédito Original'] = df_creditos['Crédito Original'].apply(formatar_moeda_br)
+        df_creditos['Total Débitos'] = df_creditos['Total Débitos'].apply(formatar_moeda_br)
+        df_creditos['Saldo Final'] = df_creditos['Saldo Final'].apply(formatar_moeda_br)
+
+    # --- 2. Aba ABATIMENTOS ---
+    abatimentos = HistoricoAbatimento.objects.all().select_related('credito_origem', 'usuario').values(
+        'credito_origem__dni', 'data_abatimento', 'valor', 'observacao', 'usuario__username'
+    )
+    df_abatimentos = pd.DataFrame(list(abatimentos))
+    if not df_abatimentos.empty:
+        df_abatimentos.columns = ['DNI', 'Data Abatimento', 'Valor Abatido', 'Observação', 'Usuário']
+        df_abatimentos['Data Abatimento'] = pd.to_datetime(df_abatimentos['Data Abatimento']).dt.strftime('%d/%m/%Y')
+        
+        # Formata Valor (Moeda BR)
+        df_abatimentos['Valor Abatido'] = df_abatimentos['Valor Abatido'].apply(formatar_moeda_br)
+
+    # --- 3. Aba CONTATOS ---
+    contatos = HistoricoContato.objects.all().select_related('credito_origem', 'usuario').values(
+        'credito_origem__dni', 'data_contato', 'anotacao', 'usuario__username'
+    )
+    df_contatos = pd.DataFrame(list(contatos))
+    if not df_contatos.empty:
+        df_contatos.columns = ['DNI', 'Data Contato', 'Histórico/Anotação', 'Usuário']
+        df_contatos['Data Contato'] = pd.to_datetime(df_contatos['Data Contato']).dt.strftime('%d/%m/%Y')
+
+    # --- 4. Gerar o arquivo ---
+    response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    response['Content-Disposition'] = 'attachment; filename=Relatorio_Creditos_Completo.xlsx'
+
+    with pd.ExcelWriter(response, engine='openpyxl') as writer:
+        if not df_creditos.empty:
+            df_creditos.to_excel(writer, index=False, sheet_name='Base de Créditos')
+        if not df_abatimentos.empty:
+            df_abatimentos.to_excel(writer, index=False, sheet_name='Histórico de Abatimentos')
+        if not df_contatos.empty:
+            df_contatos.to_excel(writer, index=False, sheet_name='Histórico de Contatos')
+
+    return response
+
+@login_required
+def listar_creditos(request):
+    # Começamos pegando TODOS os créditos
+    creditos = CreditoNaoDestinado.objects.all().order_by('-data')
+    
+    # Capturando os dados digitados nos filtros (se houver)
+    f_dni = request.GET.get('dni', '')
+    f_data = request.GET.get('data', '')
+    f_cliente = request.GET.get('cliente', '')
+    f_empresa = request.GET.get('empresa', '')
+
+    # Aplicando os filtros dinamicamente
+    if f_dni:
+        creditos = creditos.filter(dni__icontains=f_dni) # icontains = Contém o texto (ignorando maiúsculas/minúsculas)
+    if f_data:
+        creditos = creditos.filter(data=f_data) # Data exata
+    if f_cliente:
+        creditos = creditos.filter(cliente__icontains=f_cliente)
+    if f_empresa:
+        creditos = creditos.filter(empresa__icontains=f_empresa)
+
+    # Passamos os filtros de volta para o HTML para manter os campos preenchidos após recarregar
+    context = {
+        'creditos': creditos,
+        'f_dni': f_dni,
+        'f_data': f_data,
+        'f_cliente': f_cliente,
+        'f_empresa': f_empresa,
+    }
+    
+    return render(request, 'analise/listar_creditos.html', context)

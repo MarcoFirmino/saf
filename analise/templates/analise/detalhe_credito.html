@@ -1,0 +1,141 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="card shadow-sm mb-4 border-primary">
+        <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+            <h5 class="mb-0">Detalhes do Crédito DNI: {{ credito.dni }}</h5>
+            <a href="{% url 'listar_creditos' %}" class="btn btn-sm btn-light text-primary">Voltar</a>
+        </div>
+        <div class="card-body row">
+            <div class="col-md-3 border-end">
+                <p class="text-muted mb-0 small">Cliente</p>
+                <h6 class="fw-bold">{{ credito.cliente }}</h6>
+                <p class="text-muted mb-0 small mt-2">Data e Estabelecimento</p>
+                <h6>{{ credito.data|date:"d/m/Y" }} - {{ credito.estab }}</h6>
+            </div>
+            <div class="col-md-3 border-end">
+                <p class="text-muted mb-0 small">Crédito Original</p>
+                <h5 class="text-success">R$ {{ credito.credito }}</h5>
+            </div>
+            <div class="col-md-3 border-end">
+                <p class="text-muted mb-0 small">Total Abatido/Devolvido</p>
+                <h5 class="text-danger">R$ {{ credito.debitos }}</h5>
+            </div>
+            <div class="col-md-3">
+                <p class="text-muted mb-0 small">Saldo Atual a Destinar</p>
+                <h4 class="text-primary fw-bold">R$ {{ credito.saldo_final }}</h4>
+            </div>
+        </div>
+    </div>
+
+    <ul class="nav nav-tabs" id="creditoTabs" role="tablist">
+        <li class="nav-item" role="presentation">
+            <button class="nav-link active" id="contatos-tab" data-bs-toggle="tab" data-bs-target="#contatos" type="button" role="tab" aria-controls="contatos" aria-selected="true">
+                <i class="bi bi-chat-left-text me-1"></i> Histórico de Contatos
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="abatimentos-tab" data-bs-toggle="tab" data-bs-target="#abatimentos" type="button" role="tab" aria-controls="abatimentos" aria-selected="false">
+                <i class="bi bi-cash-coin me-1"></i> Histórico de Abatimentos
+            </button>
+        </li>
+    </ul>
+
+    <div class="tab-content border border-top-0 p-3 bg-white shadow-sm" id="creditoTabsContent">
+        
+        <div class="tab-pane fade show active" id="contatos" role="tabpanel" aria-labelledby="contatos-tab">
+            <form method="POST" class="mb-4 bg-light p-3 rounded border">
+                {% csrf_token %}
+                <input type="hidden" name="acao" value="novo_contato">
+                <div class="mb-2">
+                    <label class="form-label fw-bold text-muted small">Registrar Novo Contato/Tratativa</label>
+                    <textarea class="form-control" name="anotacao" rows="2" required placeholder="Falei com cliente sobre..."></textarea>
+                </div>
+                <button type="submit" class="btn btn-sm btn-primary">Salvar Contato</button>
+            </form>
+
+            <ul class="list-group list-group-flush">
+                {% for contato in credito.contatos.all %}
+                <li class="list-group-item">
+                    <div class="d-flex w-100 justify-content-between">
+                        <div>
+                            <small class="text-muted"><i class="bi bi-clock"></i> {{ contato.data_contato|date:"d/m/Y H:i" }}</small>
+                            <small class="text-muted ms-3"><i class="bi bi-person"></i> {{ contato.usuario.username }}</small>
+                        </div>
+                        
+                        <form method="POST" class="m-0 p-0" onsubmit="return confirm('Deseja realmente excluir este histórico de contato?');">
+                            {% csrf_token %}
+                            <input type="hidden" name="acao" value="excluir_contato">
+                            <input type="hidden" name="contato_id" value="{{ contato.id }}">
+                            <button type="submit" class="btn btn-sm text-danger p-0 border-0 bg-transparent" title="Excluir">
+                                <i class="bi bi-trash3"></i>
+                            </button>
+                        </form>
+                    </div>
+                    <p class="mb-1 mt-1">{{ contato.anotacao }}</p>
+                </li>
+                {% empty %}
+                <p class="text-muted">Nenhum contato registrado.</p>
+                {% endfor %}
+            </ul>
+        </div>
+
+        <div class="tab-pane fade" id="abatimentos" role="tabpanel" aria-labelledby="abatimentos-tab">
+            {% if credito.saldo_final > 0 %}
+            <form method="POST" class="mb-4 bg-light p-3 rounded border row align-items-end">
+                {% csrf_token %}
+                <input type="hidden" name="acao" value="novo_abatimento">
+                <div class="col-md-3">
+                    <label class="form-label fw-bold text-muted small">Valor a Abater/Devolver</label>
+                    <input type="text" class="form-control" name="valor" placeholder="Ex: 150.00" required>
+                </div>
+                <div class="col-md-7">
+                    <label class="form-label fw-bold text-muted small">Observação (Ex: Compensado na NF X, Devolvido via PIX)</label>
+                    <input type="text" class="form-control" name="observacao" required>
+                </div>
+                <div class="col-md-2">
+                    <button type="submit" class="btn btn-success w-100"><i class="bi bi-check-lg"></i> Registrar</button>
+                </div>
+            </form>
+            {% else %}
+            <div class="alert alert-success"><i class="bi bi-info-circle"></i> Este crédito já foi 100% destinado.</div>
+            {% endif %}
+
+            <table class="table table-sm mt-3">
+                <thead class="table-light">
+                    <tr>
+                        <th>Data</th>
+                        <th>Valor Abatido</th>
+                        <th>Observação / Destino</th>
+                        <th>Usuário</th>
+                        <th class="text-center">Ações</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for abatimento in credito.abatimentos.all %}
+                    <tr>
+                        <td class="align-middle">{{ abatimento.data_abatimento|date:"d/m/Y" }}</td>
+                        <td class="align-middle text-danger fw-bold">- R$ {{ abatimento.valor }}</td>
+                        <td class="align-middle">{{ abatimento.observacao }}</td>
+                        <td class="align-middle">{{ abatimento.usuario.username }}</td>
+                        <td class="text-center align-middle">
+                            <form method="POST" class="m-0 p-0" onsubmit="return confirm('Deseja excluir este abatimento? O valor será devolvido ao Saldo Final.');">
+                                {% csrf_token %}
+                                <input type="hidden" name="acao" value="excluir_abatimento">
+                                <input type="hidden" name="abatimento_id" value="{{ abatimento.id }}">
+                                <button type="submit" class="btn btn-sm text-danger p-0 border-0 bg-transparent" title="Desfazer Abatimento">
+                                    <i class="bi bi-trash3"></i>
+                                </button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="5" class="text-muted text-center py-3">Nenhum abatimento registrado ainda.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

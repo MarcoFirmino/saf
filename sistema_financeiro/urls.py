@@ -80,9 +80,19 @@ urlpatterns = [
     path('reset/concluido/', 
          auth_views.PasswordResetCompleteView.as_view(template_name='analise/password_reset_complete.html'), 
          name='password_reset_complete'),
-
-    # ADICIONE ESTA LINHA:
+         
+    path('gerenciar-resumo/', views.gerenciar_resumo, name='gerenciar_resumo'),
+    path('api/resumo-acao/', views.api_resumo_acao, name='api_resumo_acao'),
+    path('gerenciar-base/', views.gerenciar_base_geral, name='gerenciar_base_geral'),
+    path('api/base-geral-acao/', views.api_base_geral_acao, name='api_base_geral_acao'),
     path('tesouraria/', include('tesouraria.urls')),
     path('dashboard/', views.dashboard_resumo, name='dashboard_resumo'),
     path('renegociados/', views.renegociacoes_view, name='renegociados'),
+    path('aging-juridico/', views.aging_juridico_view, name='aging_juridico'),
+    path('creditos/', views.listar_creditos, name='listar_creditos'),
+    path('creditos/exportar-excel/', views.exportar_creditos_excel, name='exportar_creditos_excel'),
+    # IMPORTANTE: A rota 'importar' deve vir ANTES da rota com parâmetro <str:dni>
+    path('creditos/importar/', views.importar_creditos_view, name='importar_creditos'),
+    
+    path('creditos/<str:dni>/', views.detalhe_credito, name='detalhe_credito'),
 ]

@@ -1,0 +1,68 @@
+{% extends 'base.html' %}
+{% load static %}
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2><i class="bi bi-database-gear"></i> Gerenciar Base Geral</h2>
+        <span class="badge bg-secondary">Modo Administrador</span>
+    </div>
+
+    <div class="card shadow-sm">
+        <div class="table-responsive">
+            <table class="table table-sm table-hover align-middle mb-0">
+                <thead class="table-dark">
+                    <tr>
+                        <th>ID</th>
+                        <th>Estab.</th>
+                        <th>Título</th>
+                        <th>Parcela</th>
+                        <th>Vl. Líquido</th>
+                        <th>Vencimento</th>
+                        <th class="text-center">Ações</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in page_obj %}
+                    <tr id="row-{{ item.pk }}">
+                        <td>{{ item.pk }}</td>
+                        <td contenteditable="true" class="editavel" data-id="{{ item.pk }}" data-campo="estabelecimento">{{ item.estabelecimento }}</td>
+                        <td contenteditable="true" class="editavel" data-id="{{ item.pk }}" data-campo="titulo">{{ item.titulo }}</td>
+                        <td contenteditable="true" class="editavel" data-id="{{ item.pk }}" data-campo="parcela">{{ item.parcela }}</td>
+                        <td contenteditable="true" class="editavel" data-id="{{ item.pk }}" data-campo="vl_liquido">{{ item.vl_liquido }}</td>
+                        <td contenteditable="true" class="editavel" data-id="{{ item.pk }}" data-campo="dt_vencto_atual">{{ item.dt_vencto_atual|date:"Y-m-d" }}</td>
+                        <td class="text-center">
+                            <button class="btn btn-outline-danger btn-sm" onclick="excluirRegistro({{ item.pk }})">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <nav class="mt-4">
+        <ul class="pagination justify-content-center">
+            {% if page_obj.has_previous %}
+                <li class="page-item"><a class="page-link" href="?page=1">&laquo; Primeira</a></li>
+                <li class="page-item"><a class="page-link" href="?page={{ page_obj.previous_page_number }}">Anterior</a></li>
+            {% endif %}
+            <li class="page-item disabled"><span class="page-link">Página {{ page_obj.number }} de {{ page_obj.paginator.num_pages }}</span></li>
+            {% if page_obj.has_next %}
+                <li class="page-item"><a class="page-link" href="?page={{ page_obj.next_page_number }}">Próxima</a></li>
+                <li class="page-item"><a class="page-link" href="?page={{ page_obj.paginator.num_pages }}">Última &raquo;</a></li>
+            {% endif %}
+        </ul>
+    </nav>
+</div>
+
+<script>
+    window.AppConfig = {
+        csrfToken: "{{ csrf_token }}",
+        apiAcaoUrl: "{% url 'api_base_geral_acao' %}"
+    };
+</script>
+
+<script src="{% static 'js/gerenciar_base.js' %}"></script>
+{% endblock %}
