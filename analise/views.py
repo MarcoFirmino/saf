@@ -7,7 +7,7 @@ from django.views.decorators.http import require_POST
 import json
 from django.db.models import Q
 from datetime import datetime
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import Decimal, ROUND_HALF_UP, InvalidOperation
 from .services import processar_geral_pandas # <--- Certifique-se de importar
 from .services import gerar_excel_contas_receber
 from django.shortcuts import render, redirect, get_object_or_404
@@ -1226,29 +1226,34 @@ def detalhe_credito(request, dni):
             
        # Adicionando um novo Abatimento
         elif acao == 'novo_abatimento':
-            valor_digitado = request.POST.get('valor', '0')
+            valor_digitado = request.POST.get('valor', '0').strip()
             
-            # TRUQUE AQUI: Remove os pontos de milhar e troca a vírgula decimal por ponto
-            valor_limpo = valor_digitado.replace('.', '').replace(',', '.')
+            # Limpeza do padrão BR
+            if ',' in valor_digitado:
+                valor_limpo = valor_digitado.replace('.', '').replace(',', '.')
+            else:
+                valor_limpo = valor_digitado
             
             observacao = request.POST.get('observacao')
             
             try:
-                valor_float = float(valor_limpo)
-                if valor_float > credito.saldo_final:
+                # A MÁGICA ACONTECE AQUI: Usando Decimal em vez de float!
+                valor_decimal = Decimal(valor_limpo)
+                
+                if valor_decimal > credito.saldo_final:
                     messages.error(request, "O valor do abatimento não pode ser maior que o Saldo Final!")
-                elif valor_float <= 0:
+                elif valor_decimal <= 0:
                     messages.error(request, "O valor do abatimento deve ser maior que zero!")
                 else:
                     HistoricoAbatimento.objects.create(
                         credito_origem=credito,
-                        valor=valor_float,
+                        valor=valor_decimal, # Passando o Decimal para o banco
                         observacao=observacao,
                         usuario=request.user
                     )
                     messages.success(request, "Abatimento registrado e saldo atualizado!")
-            except ValueError:
-                messages.error(request, "Valor inválido para abatimento. Use o formato 21.000,00 ou 21000,00")
+            except (ValueError, InvalidOperation):
+                messages.error(request, "Valor inválido para abatimento. Use o formato 21.000,00 ou 21000.00")
         
         # EXCLUIR CONTATO
         elif acao == 'excluir_contato':

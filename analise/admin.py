@@ -21,7 +21,8 @@ from .models import (
     DevedorAging,
     CreditoNaoDestinado, 
     HistoricoAbatimento, 
-    HistoricoContato
+    HistoricoContato,
+    Excecao
     
 )
 @admin.register(CodigoIgnorado)
@@ -306,3 +307,20 @@ class HistoricoContatoAdmin(admin.ModelAdmin):
     list_display = ('credito_origem', 'data_contato', 'usuario')
     search_fields = ('credito_origem__dni', 'anotacao')
     list_filter = ('data_contato', 'usuario')
+
+# =============================================================================
+# ADMIN: EXCEÇÕES DE CARTEIRA
+# =============================================================================
+@admin.register(Excecao)
+class ExcecaoAdmin(admin.ModelAdmin):
+    # Quais colunas vão aparecer na listagem (como se fosse uma tabela)
+    list_display = ('raiz_cnpj', 'cnpj', 'nome_abrev', 'carteira')
+    
+    # Cria uma barra de pesquisa no topo para buscar por esses campos
+    search_fields = ('raiz_cnpj', 'cnpj', 'nome_abrev', 'carteira')
+    
+    # Cria um filtro lateral rápido por carteira
+    list_filter = ('carteira',)
+    
+    # Ordenação padrão (alfabética pela raiz)
+    ordering = ('raiz_cnpj',)

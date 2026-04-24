@@ -2,9 +2,10 @@ import pandas as pd
 import xlsxwriter
 from io import BytesIO
 from django.http import HttpResponse
-from .models import BaseGeral, CodigoIgnorado
+from .models import BaseGeral, CodigoIgnorado, Excecao
 from .auxiliar import aplicar_regras_banco
 from .etl_relatorios import popular_banco_relatorio
+
 
 # =============================================================================
 # FUNÇÃO 1: RELATÓRIO GERAL (Relatório Completo / Staging)
@@ -91,7 +92,7 @@ def processar_geral_pandas(request, data_corte_str, data_correcao_str):
     df_final['Série'] = df[cols_origem['serie']]
     df_final['Título'] = df[cols_origem['titulo']]
     df_final['Parcela'] = df[cols_origem['parcela']].astype(str).str.replace(r'\.0$', '', regex=True).str.zfill(2)
-    df_final['Unid.Negoc'] = df[cols_origem['unid_negoc']]
+    df_final['Unid.Negoc'] = df[cols_origem['unid_negoc']].astype(str).str.strip()
     df_final['Empresa'] = df[cols_origem['empresa']]
     df_final['Codigo'] = df[cols_origem['codigo']] 
     df_final['CNPJ/CPF Cliente'] = df[cols_origem['cnpj_cliente']]
@@ -120,7 +121,7 @@ def processar_geral_pandas(request, data_corte_str, data_correcao_str):
         'DTV': 'Logística', 'COF': 'Logística', 'MAN': 'Segel', 'NUM': 'Logística',
         'LOC': 'Segel', 'MON': 'Segel', 'CCV': 'Logística de Carga', 'FOR': 'Provig', 'VEN': 'Segel'
     }
-    df_final['Negócio'] = df_final['Unid.Negoc'].str.strip().str.upper().map(mapa_negocio).fillna('')
+    df_final['Negócio'] = df_final['Unid.Negoc'].str.upper().map(mapa_negocio).fillna('')
 
     df_final['Empresa'] = df_final['Empresa'].astype(str).str.strip().str.zfill(2)
     mapa_empresa = {
@@ -165,10 +166,33 @@ def processar_geral_pandas(request, data_corte_str, data_correcao_str):
 
     df_final['Status'] = df_final.apply(classificar_status, axis=1)
 
+    # =========================================================
+    # REGRAS GERAIS DA EMPRESA (O VILÃO QUE SOBREESCREVIA)
+    # =========================================================
     try:
         df_final = aplicar_regras_banco(df_final)
     except Exception as e:
         print(f"Aviso: Não foi possível aplicar regras do auxiliar: {e}")
+
+    # =========================================================
+    # NOVA REGRA: EXCEÇÕES (RODA POR ÚLTIMO PARA NÃO SER APAGADA)
+    # =========================================================
+    from .models import Excecao
+    
+    excecoes_qs = Excecao.objects.values('raiz_cnpj', 'unid_negoc', 'carteira')
+    if excecoes_qs.exists():
+        mapa_excecoes = {
+            (str(e['raiz_cnpj']).strip(), str(e['unid_negoc']).strip()): e['carteira'] 
+            for e in excecoes_qs
+        }
+
+        def aplicar_excecao_final(row):
+            chave_dataset = (str(row['Raiz do CNPJ']).strip(), str(row['Unid.Negoc']).strip())
+            # Se a chave existir, traz a carteira do banco. Se não, preserva o que a regra geral aplicou.
+            return mapa_excecoes.get(chave_dataset, row['Carteira'])
+
+        df_final['Carteira'] = df_final.apply(aplicar_excecao_final, axis=1)
+    # =========================================================
 
     colunas_ordenadas = [
         'Regional', 'Base Operacional', 'Estabelec', 'Espécie', 'Série', 'Título', 'Parcela', 
@@ -246,10 +270,6 @@ def processar_geral_pandas(request, data_corte_str, data_correcao_str):
         salvar_e_formatar(df_todos_clientes, 'Todos os Clientes')
 
     return response
-
-# =============================================================================
-# FUNÇÃO 2: RELATÓRIO CONTAS A RECEBER (Tabela Dinâmica do Excel)
-# =============================================================================
 def gerar_excel_contas_receber():
     """
     Gera o Relatório de Contas a Receber completo.
@@ -428,6 +448,42 @@ def gerar_excel_contas_receber():
     output.seek(0)
     return output
 
-# No topo do arquivo
-from .etl_relatorios import popular_banco_relatorio
+def debug_comparacao_excecoes(df_final, mapa_excecoes):
+    print("\n" + "="*50)
+    print("DEBUG: ANÁLISE DE CONTEÚDO - EXCEÇÕES")
+    print("="*50)
+
+    # 1. Mostra o que tem no Mapa (vindo do Banco)
+    print("\n--- CONTEÚDO DA TABELA EXCEÇÕES (MAPA) ---")
+    if not mapa_excecoes:
+        print("AVISO: O mapa de exceções está VAZIO!")
+    for chave, carteira in mapa_excecoes.items():
+        # Usamos repr() para ver se existem espaços ocultos ou quebras de linha
+        print(f"Chave no Banco: {repr(chave)} -> Carteira: {repr(carteira)}")
+
+    # 2. Mostra o que tem no DataFrame para o cliente específico
+    print("\n--- CONTEÚDO DO DATAFRAME (LINHA ALVO) ---")
+    alvo_raiz = "03.007.331"
+    alvo_unid = "CSG"
+    
+    # Filtra o dataframe para achar o registro
+    filtro = (df_final['Raiz do CNPJ'] == alvo_raiz) & (df_final['Unid.Negoc'] == alvo_unid)
+    df_teste = df_final[filtro]
+
+    if not df_teste.empty:
+        linha = df_teste.iloc[0]
+        print(f"Raiz no DF: {repr(linha['Raiz do CNPJ'])} (Tamanho: {len(linha['Raiz do CNPJ'])})")
+        print(f"Unid no DF: {repr(linha['Unid.Negoc'])} (Tamanho: {len(linha['Unid.Negoc'])})")
+        
+        # Simula a chave que o sistema está tentando montar
+        chave_busca = (str(linha['Raiz do CNPJ']).strip(), str(linha['Unid.Negoc']).strip())
+        print(f"Chave gerada para busca: {repr(chave_busca)}")
+        
+        if chave_busca in mapa_excecoes:
+            print("\n>>> RESULTADO: O 'match' DEVERIA FUNCIONAR! A chave existe no mapa.")
+        else:
+            print("\n>>> RESULTADO: O 'match' FALHOU. A chave gerada não é idêntica à do mapa.")
+    else:
+        print(f"AVISO: Não encontrei no DataFrame nenhuma linha com Raiz {alvo_raiz} e Unid {alvo_unid}.")
+    print("="*50 + "\n")
 

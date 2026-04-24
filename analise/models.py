@@ -4,6 +4,7 @@ from django.contrib.auth.models import User
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 
+
 # --- Tabela que já criamos antes ---
 class CodigoIgnorado(models.Model):
     codigo = models.IntegerField(unique=True, verbose_name="Código")
@@ -553,3 +554,17 @@ class HistoricoContato(models.Model):
 
     class Meta:
         ordering = ['-data_contato'] # Mais recentes primeiro
+
+class Excecao(models.Model):
+    raiz_cnpj = models.CharField("Raiz CNPJ", max_length=13)
+    cnpj = models.CharField("CNPJ", max_length=18, blank=True, null=True)
+    nome_abrev = models.CharField("Nome Abrev", max_length=150, blank=True, null=True)
+    unid_negoc = models.CharField("Unid.Negoc", max_length=4, blank=True, null=True) # Novo Campo
+    carteira = models.CharField("Carteira", max_length=50)
+
+    def __str__(self):
+        return f"{self.raiz_cnpj} - {self.carteira}"
+
+    class Meta:
+        verbose_name = "Exceção"
+        verbose_name_plural = "Exceções"
