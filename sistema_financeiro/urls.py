@@ -1,14 +1,15 @@
 from django.contrib import admin
 from django.urls import path, include
 from django.contrib.auth import views as auth_views
-
+from django.urls import path, include
+from django.views.generic import RedirectView
 # MUDANÇA IMPORTANTE: Importamos o módulo inteiro 'views'
 # Isso evita o erro de "name 'views' is not defined" e facilita o uso
 from analise import views
 
 urlpatterns = [
+    path('', RedirectView.as_view(url='/dashboard/', permanent=False)),
     path('admin/', admin.site.urls),
-    
     # =========================================================
     # NAVEGAÇÃO
     # =========================================================
@@ -95,4 +96,5 @@ urlpatterns = [
     path('creditos/importar/', views.importar_creditos_view, name='importar_creditos'),
     
     path('creditos/<str:dni>/', views.detalhe_credito, name='detalhe_credito'),
+    path('conciliacao/', include('conciliacao.urls')),
 ]

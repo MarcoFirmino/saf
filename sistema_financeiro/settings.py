@@ -41,6 +41,7 @@ INSTALLED_APPS = [
     'import_export',
     'analise',
     'tesouraria',
+    'conciliacao',
 ]
 
 MIDDLEWARE = [
@@ -120,7 +121,10 @@ USE_THOUSANDS_SEPARATOR = True
 THOUSAND_SEPARATOR = '.'
 DECIMAL_SEPARATOR = ','
 NUMBER_GROUPING = 3
+USE_TZ = True
 
+# ESSA É A LINHA MÁGICA QUE ATIVA O PONTO NA MILHAR:
+USE_THOUSAND_SEPARATOR = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
 

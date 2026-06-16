@@ -1,0 +1,44 @@
+{% extends 'base.html' %} {% block content %}
+<div class="container-fluid mt-4">
+    <h3>Gestão de Créditos Não Destinados (DNI)</h3>
+    <hr>
+
+    <table class="table table-striped table-hover mt-3">
+        <thead class="table-dark">
+            <tr>
+                <th>DNI</th>
+                <th>Data</th>
+                <th>Banco</th>
+                <th>Cliente</th>
+                <th>Crédito Original</th>
+                <th>Saldo Disponível</th>
+                <th>Ações</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for c in creditos %}
+            <tr>
+                <td><strong>{{ c.dni }}</strong></td>
+                <td>{{ c.data|date:"d/m/Y" }}</td>
+                <td>{{ c.banco }}</td>
+                <td>{{ c.cliente }}</td>
+                <td>R$ {{ c.credito }}</td>
+                <td class="text-success fw-bold">R$ {{ c.saldo_final }}</td>
+                <td>
+                    <form method="POST" action="" onsubmit="return confirm('Tem certeza que deseja cancelar este crédito e devolver o depósito aos pendentes?');">
+                        {% csrf_token %}
+                        <input type="hidden" name="acao" value="cancelar_credito">
+                        <input type="hidden" name="credito_id" value="{{ c.id }}">
+                        <button type="submit" class="btn btn-sm btn-danger">Cancelar / Retornar</button>
+                    </form>
+                </td>
+            </tr>
+            {% empty %}
+            <tr>
+                <td colspan="7" class="text-center">Nenhum crédito não destinado encontrado.</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

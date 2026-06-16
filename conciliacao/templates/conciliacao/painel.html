@@ -1,0 +1,505 @@
+{% extends 'base.html' %}
+{% load static %}
+{% load humanize %}
+
+{% block content %}
+<div class="container-fluid mt-3">
+    <div class="row">
+        
+        <div class="col-md-3" id="menu-lateral" style="transition: all 0.3s ease;">
+            <div class="card shadow-sm border-0 h-100">
+                <div class="card-header bg-dark text-white p-3">
+                    <h6 class="mb-2"><i class="bi bi-bank"></i> Depósitos do Dia</h6>
+                    
+                    <form method="GET" action="" class="m-0 mb-2">
+                        {% if extrato_selecionado %}
+                            <input type="hidden" name="extrato_id" value="{{ extrato_selecionado.id }}">
+                        {% endif %}
+                        
+                        <div class="row g-2">
+                            <div class="col-6">
+                                <select name="filtro_banco" class="form-select form-select-sm shadow-none" onchange="this.form.submit()">
+                                    <option value="">Todos Bancos</option>
+                                    {% for banco in bancos_disponiveis %}
+                                        <option value="{{ banco }}" {% if banco == filtro_banco %}selected{% endif %}>{{ banco }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="col-6">
+                                <select name="filtro_empresa" class="form-select form-select-sm shadow-none" onchange="this.form.submit()">
+                                    <option value="">Todas Empresas</option>
+                                    {% for emp in empresas_disponiveis %}
+                                        <option value="{{ emp }}" {% if emp == filtro_empresa %}selected{% endif %}>Empresa {{ emp }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                        </div>
+                        </form>
+                    
+                    <div class="d-grid gap-2 mb-2">
+                        <a href="{% url 'gestao_conciliados' %}" class="btn btn-outline-light btn-sm shadow-sm">
+                            <i class="bi bi-journal-text"></i> Ver Notas Conciliadas
+                        </a>
+                    </div>
+                </div>
+                
+                <div class="list-group list-group-flush" style="max-height: 80vh; overflow-y: auto;">
+                    {% for extrato in extratos_pendentes %}
+                        <a href="?extrato_id={{ extrato.id }}{% if filtro_banco %}&filtro_banco={{ filtro_banco }}{% endif %}{% if filtro_empresa %}&filtro_empresa={{ filtro_empresa }}{% endif %}" 
+                           class="list-group-item list-group-item-action {% if extrato_selecionado and extrato_selecionado.id == extrato.id %}active bg-primary text-white{% endif %}">
+                            <div class="d-flex w-100 justify-content-between align-items-center">
+                                <small class="fw-bold">
+                                    {% if extrato.status == 'CONCILIADO' %}
+                                        <i class="bi bi-check-circle-fill text-success me-1" title="Já Conciliado"></i>
+                                    {% endif %}
+                                    {{ extrato.banco }}
+                                </small>
+                                <small style="font-size: 0.75rem;">{{ extrato.data_transacao|date:"d/m/y" }}</small>
+                            </div>
+                            
+                            <h6 class="mb-1 mt-1">R$ {{ extrato.saldo_restante|floatformat:2|intcomma }}</h6>
+                            {% if extrato.is_parcial and extrato.status == 'PENDENTE' %}
+                                <span class="badge bg-warning text-dark mb-1" style="font-size: 0.65rem;">Uso Parcial</span>
+                            {% endif %}
+
+                            <small class="d-block text-truncate {% if extrato_selecionado and extrato_selecionado.id == extrato.id %}text-white-50{% else %}text-muted{% endif %}" style="max-width: 100%;">
+                                {{ extrato.descricao }}
+                            </small>
+                            <small class="{% if extrato_selecionado and extrato_selecionado.id == extrato.id %}text-white-50{% else %}text-muted{% endif %}">
+                                <strong>CNPJ:</strong> {{ extrato.cnpj_cpf|default:"Não identificado" }}
+                            </small>
+                        </a>
+                    {% empty %}
+                        <div class="p-4 text-center text-muted">
+                            <i class="bi bi-check-circle display-4"></i>
+                            <p class="mt-2">Nenhum depósito listado.</p>
+                        </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-9" id="area-tabela" style="transition: all 0.3s ease;">
+            
+            <div class="mb-2 text-start">
+                <button id="btn-toggle-menu" class="btn btn-sm btn-outline-secondary bg-white border-0 shadow-sm fw-bold px-3">
+                    <i class="bi bi-arrows-expand" id="icone-btn-menu"></i> <span id="texto-btn-menu">Ocultar Menu Lateral</span>
+                </button>
+            </div>
+
+            {% if extrato_selecionado %}
+                
+                <div class="card shadow border-0 mb-3">
+                    <div class="card-body bg-light">
+                        <div class="row align-items-center">
+                            <div class="col-md-7">
+                                <h5 class="text-primary mb-1">{{ extrato_selecionado.descricao }}</h5>
+                                <p class="mb-0 text-muted">
+                                    Saldo Disponível: <strong id="valor-deposito-display" data-valor="{{ extrato_selecionado.saldo_restante|stringformat:'f' }}">R$ {{ extrato_selecionado.saldo_restante|floatformat:2|intcomma }}</strong> | 
+                                    CNPJ Salvo: <strong class="{% if not extrato_selecionado.cnpj_cpf %}text-danger{% endif %}">{{ extrato_selecionado.cnpj_cpf|default:"Nenhum CNPJ vinculado" }}</strong>
+                                </p>
+                            </div>
+                            <div class="col-md-5">
+                                <form method="POST" action="{% url 'painel_conciliacao' %}?extrato_id={{ extrato_selecionado.id }}" class="m-0 mb-2">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="acao" value="vincular_cnpj">
+                                    <div class="input-group input-group-sm shadow-sm">
+                                        <span class="input-group-text bg-primary text-white border-primary"><i class="bi bi-link-45deg"></i></span>
+                                        <input type="text" name="cnpj" class="form-control border-primary" placeholder="Digite o CNPJ..." value="{{ extrato_selecionado.cnpj_cpf|default:'' }}" required>
+                                        <button type="submit" class="btn btn-primary">Buscar Notas</button>
+                                    </div>
+                                </form>
+
+                                <form id="form-upload-compo" enctype="multipart/form-data" class="m-0 text-end">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="extrato_id" value="{{ extrato_selecionado.id }}">
+                                    <label for="compo-excel-input" class="btn btn-outline-success btn-sm shadow-sm m-0 w-100 fw-bold" style="cursor: pointer;">
+                                        <i class="bi bi-file-earmark-spreadsheet"></i> Importar Composição (Excel)
+                                    </label>
+                                    <input type="file" id="compo-excel-input" name="compo_excel" accept=".xlsx, .xls" style="display: none;">
+                                </form>
+
+                                <button type="button" class="btn btn-warning btn-sm shadow-sm mt-2 w-100 fw-bold" data-bs-toggle="modal" data-bs-target="#modalGerarCredito">
+                                    <i class="bi bi-box-arrow-right"></i> Gerar Crédito (Exceção / PDD)
+                                </button>
+                                <button type="button" class="btn btn-info btn-sm shadow-sm mt-2 w-100 fw-bold text-white" data-bs-toggle="modal" data-bs-target="#modalEmailCliente">
+                                    <i class="bi bi-envelope-at"></i> Solicitar Composição (E-mail)
+                                </button>
+                            </div>
+                        </div>
+
+                        <div id="alerta-composicao" class="alert mt-3 mb-0 d-none shadow-sm" style="font-size: 0.85rem;"></div>
+                    </div>
+                </div>
+
+                <div id="painel-impostos" class="card shadow-sm border-warning mb-3" style="display: none; background-color: #fffdf5;">
+                    <div class="card-body p-3">
+                        <h6 class="text-warning fw-bold mb-3">
+                            <i class="bi bi-sliders"></i> Ajuste de Retenções da Nota <span id="ajuste-titulo-nota" class="text-dark"></span>
+                            <span id="ajuste-total-tx" class="text-danger ms-2" style="font-size: 0.95rem;"></span>
+                        </h6>
+                        
+                        <input type="hidden" id="ajuste-nota-id">
+                        <input type="hidden" id="ajuste-vl-bruto">
+
+                        <div class="row g-2 mb-2 text-center" style="font-size: 0.8rem;">
+                            <div class="col">
+                                <label class="fw-bold text-muted">PIS <span id="perc-pis" class="text-info" style="font-size: 0.7rem;"></span></label>
+                                <input type="text" class="acionar-calculadora form-control form-control-sm tx-input" id="inp-pis" readonly>
+                            </div>
+
+                            <div class="col">
+                                <label class="fw-bold text-muted">Cofins <span id="perc-cofins" class="text-info" style="font-size: 0.7rem;"></span></label>
+                                <input type="text" class="acionar-calculadora form-control form-control-sm tx-input" id="inp-cofins" readonly>
+                            </div>
+
+                            <div class="col">
+                                <label class="fw-bold text-muted">CSLL <span id="perc-csll" class="text-info" style="font-size: 0.7rem;"></span></label>
+                                <input type="text" class="acionar-calculadora form-control form-control-sm tx-input" id="inp-csll" readonly>
+                            </div>
+
+                            <div class="col">
+                                <label class="fw-bold text-muted">IRRF <span id="perc-irrf" class="text-info" style="font-size: 0.7rem;"></span></label>
+                                <input type="text" class="acionar-calculadora form-control form-control-sm tx-input" id="inp-irrf" readonly>
+                            </div>
+
+                            <div class="col">
+                                <label class="fw-bold text-muted">ISS <span id="perc-iss" class="text-info" style="font-size: 0.7rem;"></span></label>
+                                <input type="text" class="acionar-calculadora form-control form-control-sm tx-input" id="inp-iss" readonly>
+                            </div>
+
+                            <div class="col">
+                                <label class="fw-bold text-muted">INSS <span id="perc-inss" class="text-info" style="font-size: 0.7rem;"></span></label>
+                                <input type="text" class="acionar-calculadora form-control form-control-sm tx-input" id="inp-inss" readonly>
+                            </div>
+                        </div>
+                        <div class="row g-2 mb-3 text-center" style="font-size: 0.8rem;">
+                            <div class="col">
+                                <label class="fw-bold text-muted">Desconto</label>
+                                <input type="text" class="acionar-calculadora form-control form-control-sm tx-input" id="inp-desconto" readonly>
+                            </div>
+
+                            <div class="col">
+                                <label class="fw-bold text-muted">Abatimento</label>
+                                <input type="text" class="acionar-calculadora form-control form-control-sm tx-input" id="inp-abatimento" readonly>
+                            </div>
+
+                            <div class="col">
+                                <label class="fw-bold text-muted">Multa</label>
+                                <input type="text" class="acionar-calculadora form-control form-control-sm tx-input" id="inp-multa" readonly>
+                            </div>
+
+                            <div class="col">
+                                <label class="fw-bold text-muted">Juros</label>
+                                <input type="text" class="acionar-calculadora form-control form-control-sm tx-input" id="inp-juros" readonly>
+                            </div>
+                            
+                            <div class="col bg-light border rounded pt-1">
+                                <label class="text-muted fw-bold">Variação</label>
+                                <div id="calc-variacao" class="fw-bold">0,00%</div>
+                            </div>
+                            <div class="col bg-light border rounded pt-1">
+                                <label class="text-muted fw-bold">Diferença</label>
+                                <div id="calc-diferenca" class="fw-bold">R$ 0,00</div>
+                            </div>
+                        </div>
+                        
+                        <div class="d-flex justify-content-between align-items-center border-top pt-2">
+                            <div class="fw-bold" style="font-size: 1.1rem;">
+                                Novo Saldo Real: <span id="calc-novo-saldo" class="text-primary">R$ 0,00</span>
+                            </div>
+                            <button type="button" class="btn btn-warning btn-sm fw-bold shadow-sm" id="btn-salvar-impostos">
+                                <i class="bi bi-save"></i> Gravar Ajustes (Sem recarregar)
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card shadow-sm border-0">
+                    <div class="card-header bg-secondary text-white d-flex justify-content-between align-items-center">
+                        <h6 class="mb-0"><i class="bi bi-receipt"></i> Notas em Aberto Sugeridas</h6>
+                        <h5 class="mb-0 bg-dark px-3 py-1 rounded shadow-sm" id="soma-selecionada">
+                            Soma: R$ 0,00
+                        </h5>
+                    </div>
+                    <div class="card-body p-0">
+                        {% if extrato_selecionado.status == 'CONCILIADO' %}
+                            
+                            <div class="p-4 border-bottom text-center bg-light">
+                                <i class="bi bi-check-circle-fill text-success" style="font-size: 3rem;"></i>
+                                <h4 class="mt-2 text-success fw-bold">Depósito Conciliado com Sucesso!</h4>
+                                <p class="text-muted mb-3">As notas já foram casadas com este depósito (ou tratado como crédito).</p>
+                                
+                                <div class="d-flex justify-content-center gap-2">
+                                    <a href="{% url 'exportar_lote_datasul' extrato_selecionado.id %}" class="btn btn-success btn-lg shadow-sm">
+                                        <i class="bi bi-file-earmark-excel"></i> Baixar Lote Deste Depósito
+                                    </a>
+                                    
+                                    <form method="POST" action="{% url 'painel_conciliacao' %}?extrato_id={{ extrato_selecionado.id }}" class="m-0">
+                                        {% csrf_token %}
+                                        <input type="hidden" name="acao" value="desfazer_conciliacao">
+                                        <button type="submit" class="btn btn-outline-danger btn-lg shadow-sm" onclick="return confirm('Tem certeza que deseja desfazer esta conciliação? As notas voltarão para Pendentes.');">
+                                            <i class="bi bi-arrow-counterclockwise"></i> Desfazer Conciliação
+                                        </button>
+                                    </form>
+                                </div>
+                            </div>
+                            
+                            <div class="table-responsive">
+                                <table class="table table-hover table-sm align-middle mb-0" style="font-size: 0.85rem;">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th class="text-center">Estab.</th>
+                                            <th class="text-center">Espécie</th>
+                                            <th class="text-center">Série</th>
+                                            <th>Título/Parc.</th>
+                                            <th>Vencimento</th>
+                                            <th class="text-end">Vl. Bruto</th>
+                                            <th class="text-end">Vl. Conciliado</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for nota in notas_conciliadas %}
+                                            <tr>
+                                                <td class="text-center px-1" style="width: 40px; font-size: 0.8rem;">{{ nota.estabelecimento|default:"-" }}</td>
+                                                <td class="text-center">{{ nota.especie|default:"-" }}</td>
+                                                <td class="text-center">{{ nota.serie|default:"-" }}</td>
+                                                <td><strong>{{ nota.titulo }}</strong> / {{ nota.parcela }}</td>
+                                                <td>{{ nota.dt_vencto_atual|date:"d/m/Y" }}</td>
+                                                <td class="text-end text-muted">R$ {{ nota.vl_bruto|floatformat:2|intcomma }}</td>
+                                                <td class="text-end fw-bold text-success">
+                                                    R$ {{ nota.vl_liquido|floatformat:2|intcomma }}
+                                                </td>
+                                            </tr>
+                                        {% empty %}
+                                            <tr>
+                                                <td colspan="7" class="text-center text-muted py-3">Nenhuma nota associada encontrada (pode ser um crédito não destinado).</td>
+                                            </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        {% else %}
+                            <form method="POST" id="form-multiplas-notas" class="m-0">
+                                {% csrf_token %}
+                                <input type="hidden" name="acao" value="conciliar_multiplas">
+                                
+                                <div class="table-responsive" style="max-height: 50vh; overflow-y: auto;">
+                                    <table class="table table-hover table-striped align-middle mb-0" style="font-size: 0.85rem;" id="tabela-notas">
+                                        
+                                        <thead class="table-light sticky-top">
+                                            <tr>
+                                                <th class="text-center sortable user-select-none px-1" data-sort="string" style="width: 40px; cursor: pointer; font-size: 0.8rem;">Estab. <i class="bi bi-arrow-down-up small text-muted"></i></th>
+                                                <th class="text-center sortable user-select-none" data-sort="string" style="width: 60px; cursor: pointer;">Espécie <i class="bi bi-arrow-down-up small text-muted"></i></th>
+                                                <th class="text-center sortable user-select-none" data-sort="string" style="width: 60px; cursor: pointer;">Série <i class="bi bi-arrow-down-up small text-muted"></i></th>
+                                                <th class="sortable user-select-none" data-sort="string" style="cursor: pointer;">Título <i class="bi bi-arrow-down-up small text-muted"></i></th>
+                                                <th class="text-center sortable user-select-none" data-sort="string" style="width: 60px; cursor: pointer;">Parc. <i class="bi bi-arrow-down-up small text-muted"></i></th>
+                                                <th class="sortable user-select-none" data-sort="date" style="cursor: pointer;">Emissão <i class="bi bi-arrow-down-up small text-muted"></i></th>
+                                                <th class="sortable user-select-none" data-sort="date" style="cursor: pointer;">Vencimento <i class="bi bi-arrow-down-up small text-muted"></i></th>
+                                                <th class="text-end sortable user-select-none" data-sort="currency" style="cursor: pointer;">Vl. Bruto <i class="bi bi-arrow-down-up small text-muted"></i></th>
+                                                
+                                                <th class="text-end sortable user-select-none col-compo d-none" data-sort="currency" style="cursor: pointer;">Vl. Inf. Excel <i class="bi bi-arrow-down-up small text-muted"></i></th>
+                                                <th class="text-end sortable user-select-none col-compo d-none" data-sort="currency" style="cursor: pointer;">Diferença <i class="bi bi-arrow-down-up small text-muted"></i></th>
+                                                
+                                                <th class="text-end sortable user-select-none" data-sort="currency" style="cursor: pointer;">Saldo Real <i class="bi bi-arrow-down-up small text-muted"></i></th>
+                                                <th class="text-center" style="width: 40px;"><i class="bi bi-check-all text-primary"></i></th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {% for nota in notas_sugeridas %}
+                                                <tr class="linha-nota {% if nota.match_exato %}table-success border-success{% endif %}" id="tr-nota-{{ nota.id|stringformat:'d' }}">
+                                                    <td class="text-center px-1" style="width: 40px; font-size: 0.8rem;">{{ nota.estabelecimento|default:"-" }}</td>
+                                                    <td class="text-center">{{ nota.especie|default:"-" }}</td>
+                                                    <td class="text-center">{{ nota.serie|default:"-" }}</td>
+                                                    <td><strong>{{ nota.titulo }}</strong></td>
+                                                    <td class="text-center">{{ nota.parcela }}</td>
+                                                    <td>{{ nota.dt_emissao_orig|date:"d/m/Y" }}</td>
+                                                    <td>{{ nota.dt_vencto_atual|date:"d/m/Y" }}</td>
+                                                    <td class="text-end text-muted">R$ {{ nota.vl_bruto|floatformat:2|intcomma }}</td>
+                                                    
+                                                    <td class="text-end col-compo d-none td-vl-informado text-primary fw-bold">-</td>
+                                                    <td class="text-end fw-bold col-compo d-none td-diferenca">-</td>
+
+                                                    <td class="text-end fw-bold td-saldo-real {% if nota.match_exato %}text-success{% endif %}">
+                                                        R$ {{ nota.saldo_real_calculado|floatformat:2|intcomma }}
+                                                        {% if nota.match_exato %}
+                                                            <br><span class="badge bg-success" style="font-size: 0.7rem;">Match!</span>
+                                                        {% endif %}
+                                                    </td>
+                                                    <td class="text-center">
+                                                        <input class="form-check-input nota-checkbox" type="checkbox" 
+                                                               name="notas_selecionadas" 
+                                                               value="{{ nota.id|stringformat:'d' }}" 
+                                                               data-titulo="{{ nota.titulo }} / {{ nota.parcela }}"
+                                                               data-valor="{{ nota.saldo_real_calculado|stringformat:'f' }}"
+                                                               data-bruto="{{ nota.vl_bruto|stringformat:'f' }}"
+                                                               data-pis="{{ nota.pis|stringformat:'f' }}"
+                                                               data-cofins="{{ nota.cofins|stringformat:'f' }}"
+                                                               data-csll="{{ nota.csll|stringformat:'f' }}"
+                                                               data-irrf="{{ nota.irrf|stringformat:'f' }}"
+                                                               data-iss="{{ nota.iss|stringformat:'f' }}"
+                                                               data-inss="{{ nota.inss|stringformat:'f' }}"
+                                                               data-desconto="{{ nota.desconto|stringformat:'f' }}"
+                                                               data-abatimento="{{ nota.abatimento|stringformat:'f' }}"
+                                                               data-multa="{{ nota.multa|stringformat:'f' }}"
+                                                               data-juros="{{ nota.juros|stringformat:'f' }}"
+                                                               style="transform: scale(1.2); cursor: pointer;"
+                                                               {% if nota.match_exato %}checked{% endif %}>
+                                                    </td>
+                                                </tr>
+                                            {% empty %}
+                                                <tr class="empty-row">
+                                                    <td colspan="12" class="text-center py-4 text-muted">
+                                                        Nenhuma nota em aberto encontrada para este CNPJ.
+                                                    </td>
+                                                </tr>
+                                            {% endfor %}
+                                        </tbody>
+                                    </table>
+                                </div>
+                                {% if notas_sugeridas %}
+                                    <div class="card-footer bg-light text-end py-3">
+                                        <button type="submit" id="btn-conciliar-multiplas" class="btn btn-primary btn-lg px-5 shadow-sm" disabled>
+                                            <i class="bi bi-intersect"></i> Conciliar Notas Selecionadas
+                                        </button>
+                                    </div>
+                                {% endif %}
+                            </form>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <div class="modal fade" id="modalGerarCredito" tabindex="-1" aria-hidden="true">
+                  <div class="modal-dialog modal-lg">
+                    <div class="modal-content border-0 shadow">
+                      <div class="modal-header bg-warning text-dark">
+                        <h5 class="modal-title fw-bold"><i class="bi bi-cash-stack"></i> Gerar Crédito Não Destinado</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                      </div>
+                      <form method="POST" action="{% url 'painel_conciliacao' %}?extrato_id={{ extrato_selecionado.id }}">
+                        {% csrf_token %}
+                        <input type="hidden" name="acao" value="gerar_credito">
+                        
+                        <div class="modal-body bg-light text-start">
+                            <div class="alert alert-secondary mb-3" style="font-size: 0.85rem;">
+                                <strong>Descrição do Banco:</strong> {{ extrato_selecionado.descricao }}
+                            </div>
+                            
+                            <div class="row g-3">
+                                <div class="col-md-4">
+                                    <label class="form-label fw-bold text-muted small">Data do Depósito</label>
+                                    <input type="date" name="data" class="form-control" value="{{ extrato_selecionado.data_transacao|date:'Y-m-d' }}" readonly>
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label fw-bold text-muted small">Valor a Creditar (R$)</label>
+                                    <input type="text" name="valor" class="form-control text-danger fw-bold" value="{{ extrato_selecionado.saldo_restante|floatformat:2 }}" readonly>
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label fw-bold text-muted small">DNI (Opcional)</label>
+                                    <input type="text" name="dni" class="form-control" placeholder="Gerado automaticamente">
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label fw-bold text-muted small">Estabelecimento *</label>
+                                    <input type="number" name="estab" class="form-control" required>
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label fw-bold text-muted small">Empresa *</label>
+                                    <input type="text" name="empresa" class="form-control" placeholder="Ex: 07" required>
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label fw-bold text-muted small">Cliente / Origem *</label>
+                                    <input type="text" name="cliente" class="form-control" value="{{ extrato_selecionado.descricao }}" required>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                            <button type="submit" class="btn btn-warning fw-bold"><i class="bi bi-check-circle"></i> Confirmar e Conciliar Depósito</button>
+                        </div>
+                      </form>
+                    </div>
+                  </div>
+                </div>
+                {% else %}
+                <div class="d-flex align-items-center justify-content-center h-100" style="min-height: 60vh;">
+                    <div class="text-center text-muted">
+                        <i class="bi bi-arrow-left-square display-1"></i>
+                        <h4 class="mt-3">Selecione um depósito</h4>
+                        <p>Clique num extrato na lista ao lado para buscar as notas correspondentes.</p>
+                    </div>
+                </div>
+            {% endif %}
+        </div>
+        
+    </div>
+</div>
+<div class="modal fade" id="modalCalculadora" tabindex="-1" aria-labelledby="modalCalculadoraLabel" aria-hidden="true">
+    <div class="modal-dialog modal-sm modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header bg-primary text-white">
+                <h6 class="modal-title mb-0" id="modalCalculadoraLabel"><i class="bi bi-calculator"></i> Calcular Imposto</h6>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p class="text-muted small mb-2">Valor Bruto da Nota:</p>
+                <h5 class="text-primary mb-3">R$ <span id="calcValorBrutoText">0,00</span></h5>
+
+                <div class="mb-3">
+                    <label class="form-label small fw-bold">Porcentagem (%)</label>
+                    <div class="input-group">
+                        <input type="number" step="0.01" class="form-control" id="calcPercentual" placeholder="Ex: 1.50">
+                        <span class="input-group-text">%</span>
+                    </div>
+                </div>
+
+                <div class="d-grid mb-3">
+                    <button type="button" class="btn btn-info text-white fw-bold shadow-sm" id="btnCalcularPercentual">
+                        Calcular
+                    </button>
+                </div>
+
+                <div class="p-2 bg-light rounded text-center">
+                    <p class="text-muted small mb-0">Resultado a aplicar:</p>
+                    <h5 class="text-success mb-0 fw-bold">R$ <span id="calcResultadoText">0.00</span></h5>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-success btn-sm px-4" id="btnConfirmarCalculo">OK</button>
+            </div>
+        </div>
+    </div>
+</div>
+<div class="modal fade" id="modalEmailCliente" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header bg-info text-white">
+                <h5 class="modal-title fw-bold"><i class="bi bi-envelope"></i> Enviar Solicitação via Outlook</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body bg-light">
+                <p class="small text-muted mb-3">Confirme ou altere o(s) e-mail(s) do cliente. Use ponto e vírgula (;) para múltiplos e-mails.</p>
+                <div class="mb-3">
+                    <label class="form-label fw-bold">E-mail(s) do Cliente:</label>
+                    <input type="text" id="inputEmailCliente" class="form-control" value="{{ email_salvo }}" placeholder="exemplo@cliente.com.br; financeiro@cliente.com.br">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-info text-white fw-bold" id="btnEnviarEmailOutlook">
+                    <i class="bi bi-send"></i> Salvar e Abrir Outlook
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<input type="hidden" id="dadosEstabsJson" value="{{ dados_estabelecimentos }}">
+<input type="hidden" id="cnpjAtivoBusca" value="{{ extrato_selecionado.cnpj_cpf|default:'' }}">
+<input type="hidden" id="valorDepositoEmail" value="{{ extrato_selecionado.saldo_restante|floatformat:2 }}">
+<input type="hidden" id="dataDepositoEmail" value="{{ extrato_selecionado.data_transacao|date:'d/m/Y' }}">
+<script type="application/json" id="dadosEstabsJson">{{ dados_estabelecimentos|safe }}</script>
+
+<script src="{% static 'js/painel_conciliacao.js' %}"></script>
+<script src="{% static 'js/menulateral.js' %}"></script>
+{% endblock %}

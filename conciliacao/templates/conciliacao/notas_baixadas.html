@@ -1,0 +1,110 @@
+{% extends 'base.html' %}
+{% load humanize %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h4><i class="bi bi-archive-fill text-secondary"></i> Histórico de Notas Baixadas</h4>
+        
+        <div class="d-flex gap-2">
+            <a href="{% url 'gestao_conciliados' %}" class="btn btn-outline-secondary shadow-sm">
+                <i class="bi bi-arrow-left"></i> Voltar à Gestão
+            </a>
+            <a href="{% url 'painel_conciliacao' %}" class="btn btn-outline-danger shadow-sm">
+            <i class="bi bi-arrow-left"></i> Voltar ao Painel
+        </a>
+        </div>
+    </div>
+
+    <div class="card shadow-sm border-0 mb-4 bg-light">
+        <div class="card-body py-2">
+            <form method="GET" class="row g-3 align-items-center">
+                <div class="col-md-auto">
+                    <label class="form-label mb-0 small text-muted fw-bold">Data Extrato:</label>
+                    <input type="date" name="data" class="form-control form-control-sm shadow-none" value="{{ filtro_data }}">
+                </div>
+                
+                <div class="col-md-auto">
+                    <label class="form-label mb-0 small text-muted fw-bold">Banco:</label>
+                    <select name="banco" class="form-select form-select-sm shadow-none">
+                        <option value="">Todos os Bancos</option>
+                        {% for b in bancos_disponiveis %}
+                            <option value="{{ b }}" {% if b == filtro_banco %}selected{% endif %}>{{ b }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="col-md-auto">
+                    <label class="form-label mb-0 small text-muted fw-bold">Estab/Empresa:</label>
+                    <select name="empresa" class="form-select form-select-sm shadow-none">
+                        <option value="">Todas</option>
+                        {% for e in empresas_disponiveis %}
+                            <option value="{{ e }}" {% if e == filtro_empresa %}selected{% endif %}>Estabelecimento {{ e }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="col-md-auto mt-4 pt-2">
+                    <button type="submit" class="btn btn-primary btn-sm px-4"><i class="bi bi-search"></i> Filtrar</button>
+                    <a href="{% url 'notas_baixadas' %}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-eraser"></i> Limpar</a>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    {% for item in tabela_dados %}
+        <div class="card shadow-sm mb-4 border-0">
+            <div class="card-header bg-secondary text-white d-flex justify-content-between align-items-center">
+                <div>
+                    <strong>{{ item.extrato.banco }}</strong> | Data: {{ item.extrato.data_transacao|date:"d/m/Y" }} | 
+                    CNPJ: {{ item.extrato.cnpj_cpf|default:"N/A" }}
+                </div>
+                <div class="text-end">
+                    <span class="badge bg-light text-dark">Depósito: R$ {{ item.extrato.valor|floatformat:2|intcomma }}</span>
+                    <span class="badge bg-dark">Conciliado no Arquivo: R$ {{ item.total_usado|floatformat:2|intcomma }}</span>
+                </div>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0" style="font-size: 0.85rem;">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Estab.</th>
+                            <th>Série</th>
+                            <th>Título/Parc.</th>
+                            <th>Vencimento</th>
+                            <th class="text-end">Vl. Conciliado</th>
+                            <th class="text-center" style="width: 150px;">Ação</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for rel in item.relacoes %}
+                            <tr>
+                                <td>{{ rel.nota.estabelecimento|default:"-" }}</td>
+                                <td>{{ rel.nota.serie|default:"-" }}</td>
+                                <td><strong>{{ rel.nota.titulo }}</strong> / {{ rel.nota.parcela }}</td>
+                                <td>{{ rel.nota.dt_vencto_atual|date:"d/m/Y" }}</td>
+                                <td class="text-end text-muted fw-bold">R$ {{ rel.valor_pago|floatformat:2|intcomma }}</td>
+                                <td class="text-center">
+                                    <form method="POST" class="m-0">
+                                        {% csrf_token %}
+                                        <input type="hidden" name="acao" value="desconciliar_nota">
+                                        <input type="hidden" name="relacao_id" value="{{ rel.id }}">
+                                        <button type="submit" class="btn btn-sm btn-outline-danger shadow-sm" onclick="return confirm('ATENÇÃO: Esta nota já foi exportada para CSV. Tem a certeza que deseja desfazer a conciliação no sistema?');">
+                                            <i class="bi bi-x-circle"></i> Desfazer
+                                        </button>
+                                    </form>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    {% empty %}
+        <div class="alert alert-light text-center py-5 shadow-sm border">
+            <i class="bi bi-inboxes display-4 d-block mb-3 text-muted"></i>
+            Nenhuma nota baixada corresponde a este filtro.
+        </div>
+    {% endfor %}
+</div>
+{% endblock %}

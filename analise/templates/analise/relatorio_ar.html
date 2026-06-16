@@ -2,7 +2,6 @@
 {% load static %}
 {% load humanize %}
 
-
 {% block title %}Contas a Receber | Protege{% endblock %}
 
 {% block content %}
@@ -23,7 +22,7 @@
                 <div class="d-flex justify-content-between align-items-center">
                     <div>
                         <h3 class="mb-0"><i class="bi bi-calculator"></i> Contas a Receber</h3>
-                        <p class="mb-0 opacity-75">Relatório Dinâmico com Fórmulas de Excel</p>
+                        <p class="mb-0 opacity-75">Base Inteligente para Relatório e Conciliação</p>
                     </div>
                     <i class="bi bi-file-earmark-spreadsheet display-4"></i>
                 </div>
@@ -33,41 +32,43 @@
                 
                 <div class="row align-items-center">
                     <div class="col-md-7">
-                        <h5 class="text-success fw-bold">Como funciona este relatório?</h5>
+                        <h5 class="text-success fw-bold">Como funciona esta rotina?</h5>
                         <p class="text-muted">
-                            Diferente do relatório geral, este arquivo é gerado formatado como uma 
-                            <strong>Tabela Oficial do Excel</strong>.
+                            Você pode gerar o relatório em formato Excel ou atualizar o banco de dados interno que será utilizado no motor de Conciliação Bancária.
                         </p>
                         <ul class="list-group list-group-flush mb-4">
                             <li class="list-group-item bg-light border-0">
-                                <i class="bi bi-check-circle-fill text-success me-2"></i>
-                                <strong>Colunas Editáveis:</strong> Campos de "Juros/Multa" e "Desconto" vêm vazios  para preenchimento.
+                                <i class="bi bi-cloud-arrow-down-fill text-success me-2"></i>
+                                <strong>Gerar Excel:</strong> Tabela formatada e com fórmulas para ajustes manuais rápidos.
                             </li>
                             <li class="list-group-item bg-light border-0">
-                                <i class="bi bi-check-circle-fill text-success me-2"></i>
-                                <strong>Cálculo Automático:</strong> A coluna "Valor Total" contém uma fórmula do Excel <code>(=Original + Juros - Desconto)</code> que atualiza na hora.
-                            </li>
-                            <li class="list-group-item bg-light border-0">
-                                <i class="bi bi-check-circle-fill text-success me-2"></i>
-                                <strong>Filtros Ativos:</strong> As setas de filtro já vêm habilitadas em todas as colunas.
+                                <i class="bi bi-database-fill-up text-primary me-2"></i>
+                                <strong>Atualizar Banco (Novo):</strong> Salva todas as notas e cálculos no sistema, preparando os dados para a Conciliação e envio para o Datasul.
                             </li>
                         </ul>
                     </div>
                     
                     <div class="col-md-5 text-center border-start">
                         <div class="py-4">
-                            <p class="mb-4">Clique abaixo para baixar a versão mais recente baseada na importação atual.</p>
                             
-                            <form method="post">
+                            <form method="post" action="" class="mb-3">
                                 {% csrf_token %}
-                                <button type="submit" class="btn btn-success btn-lg w-100 py-3 shadow-sm hover-scale">
-                                    <i class="bi bi-download me-2"></i> Baixar Tabela Excel
+                                <input type="hidden" name="acao" value="popular_banco">
+                                <button type="submit" class="btn btn-primary btn-lg w-100 py-3 shadow-sm hover-scale">
+                                    <i class="bi bi-database-check me-2"></i> Atualizar Base para Conciliação
                                 </button>
                             </form>
                             
-                            <div class="mt-3 text-muted small">
-                                <i class="bi bi-info-circle"></i> O arquivo será baixado como .xlsx
-                            </div>
+                            <hr class="my-4 text-muted">
+
+                            <form method="post" action="">
+                                {% csrf_token %}
+                                <input type="hidden" name="acao" value="gerar_excel">
+                                <button type="submit" class="btn btn-outline-success btn-lg w-100 py-3 shadow-sm hover-scale">
+                                    <i class="bi bi-file-earmark-excel me-2"></i> Apenas Baixar Excel
+                                </button>
+                            </form>
+                            
                         </div>
                     </div>
                 </div>

@@ -556,6 +556,7 @@ class HistoricoContato(models.Model):
         ordering = ['-data_contato'] # Mais recentes primeiro
 
 class Excecao(models.Model):
+
     raiz_cnpj = models.CharField("Raiz CNPJ", max_length=13)
     cnpj = models.CharField("CNPJ", max_length=18, blank=True, null=True)
     nome_abrev = models.CharField("Nome Abrev", max_length=150, blank=True, null=True)
@@ -568,3 +569,48 @@ class Excecao(models.Model):
     class Meta:
         verbose_name = "Exceção"
         verbose_name_plural = "Exceções"
+
+class ContasReceber(models.Model):
+    # Identificação
+    estabelecimento = models.CharField(max_length=10, null=True, blank=True)
+    especie = models.CharField(max_length=10, null=True, blank=True)
+    serie = models.CharField(max_length=20, null=True, blank=True)
+    titulo = models.CharField(max_length=50, null=True, blank=True)
+    parcela = models.CharField(max_length=10, null=True, blank=True)
+    dt_emissao_orig = models.DateField(null=True, blank=True)
+    dt_vencto_atual = models.DateField(null=True, blank=True)
+    empresa = models.CharField(max_length=10, null=True, blank=True)
+    cnpj = models.CharField(max_length=20, null=True, blank=True)
+    nome_abrev = models.CharField(max_length=255, null=True, blank=True)
+    
+    # Valores
+    vl_bruto = models.DecimalField(max_digits=15, decimal_places=2, default=0)
+    pis = models.DecimalField(max_digits=15, decimal_places=2, default=0)
+    cofins = models.DecimalField(max_digits=15, decimal_places=2, default=0)
+    csll = models.DecimalField(max_digits=15, decimal_places=2, default=0)
+    irrf = models.DecimalField(max_digits=15, decimal_places=2, default=0)
+    iss = models.DecimalField(max_digits=15, decimal_places=2, default=0)
+    inss = models.DecimalField(max_digits=15, decimal_places=2, default=0)
+    desconto = models.DecimalField(max_digits=15, decimal_places=2, default=0)
+    abatimento = models.DecimalField(max_digits=15, decimal_places=2, default=0)
+    multa = models.DecimalField(max_digits=15, decimal_places=2, default=0)
+    juros = models.DecimalField(max_digits=15, decimal_places=2, default=0)
+    vl_liquido = models.DecimalField(max_digits=15, decimal_places=2, default=0)
+    
+    # Outros
+    carteira = models.CharField(max_length=20, null=True, blank=True)
+    nosso_numero = models.CharField(max_length=50, null=True, blank=True)
+    portador = models.CharField(max_length=50, null=True, blank=True)
+    codigo = models.CharField(max_length=50, null=True, blank=True)
+    segmento = models.CharField(max_length=50, null=True, blank=True)
+    
+    # Controle Interno
+    status = models.CharField(max_length=20, default='ABERTO') # Vai mudar para CONCILIADO depois
+    data_atualizacao = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Conta a Receber"
+        verbose_name_plural = "Contas a Receber"
+
+    def __str__(self):
+        return f"{self.titulo}/{self.parcela} - {self.nome_abrev}"

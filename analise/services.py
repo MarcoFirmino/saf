@@ -2,9 +2,10 @@ import pandas as pd
 import xlsxwriter
 from io import BytesIO
 from django.http import HttpResponse
-from .models import BaseGeral, CodigoIgnorado, Excecao
+from .models import BaseGeral, CodigoIgnorado, Excecao, ContasReceber
 from .auxiliar import aplicar_regras_banco
 from .etl_relatorios import popular_banco_relatorio
+from decimal import Decimal, InvalidOperation
 
 
 # =============================================================================
@@ -270,6 +271,7 @@ def processar_geral_pandas(request, data_corte_str, data_correcao_str):
         salvar_e_formatar(df_todos_clientes, 'Todos os Clientes')
 
     return response
+
 def gerar_excel_contas_receber():
     """
     Gera o Relatório de Contas a Receber completo.
@@ -487,3 +489,127 @@ def debug_comparacao_excecoes(df_final, mapa_excecoes):
         print(f"AVISO: Não encontrei no DataFrame nenhuma linha com Raiz {alvo_raiz} e Unid {alvo_unid}.")
     print("="*50 + "\n")
 
+def popular_banco_contas_receber():
+
+    """
+    Lê a BaseGeral e popula a tabela ContasReceber, 
+    preservando rigorosamente o histórico das notas já conciliadas ou exportadas.
+    """
+    qs = BaseGeral.objects.all().values()
+    df = pd.DataFrame(list(qs))
+    
+    if df.empty:
+        return False
+
+    # Filtros
+    if 'especie' in df.columns:
+        df['especie'] = df['especie'].astype(str).str.strip().str.upper()
+        df = df[~df['especie'].isin(['AN', 'DNI'])]
+
+    # Datas
+    cols_data = ['dt_emissao_orig', 'dt_vencto_atual']
+    for col in cols_data:
+        df[col] = pd.to_datetime(df[col], errors='coerce').dt.date
+
+    # Valores
+    cols_valor = [
+        'vl_bruto_reneg', 'pis', 'cofins', 'csll', 'irrf', 'iss', 'inss',
+        'desconto', 'liquidacao', 'multa', 'juros'
+    ]
+    for col in cols_valor:
+        if col not in df.columns:
+            df[col] = 0.0
+        else:
+            df[col] = df[col].astype(float).fillna(0.0)
+
+    # Strings
+    if 'parcela' in df.columns:
+        df['parcela'] = df['parcela'].astype(str).str.replace(r'\.0$', '', regex=True).str.strip().str.zfill(2)
+    if 'empresa' in df.columns:
+        df['empresa'] = df['empresa'].astype(str).str.replace(r'\.0$', '', regex=True).str.strip().str.zfill(2)
+
+    # ========================================================
+    # A MÁGICA DA PRESERVAÇÃO DE HISTÓRICO
+    # ========================================================
+    
+    # 1. Guarda as chaves únicas das notas que já estão CONCILIADAS ou EXPORTADAS no banco
+    notas_protegidas = ContasReceber.objects.filter(status__in=['CONCILIADO', 'EXPORTADO'])
+    chaves_protegidas = set()
+    for n in notas_protegidas:
+        chave = f"{n.estabelecimento}-{n.serie}-{n.titulo}-{n.parcela}"
+        chaves_protegidas.add(chave)
+
+    # 2. Apaga APENAS as notas que estão em "ABERTO" (Preserva a história do que já foi feito!)
+    ContasReceber.objects.exclude(status__in=['CONCILIADO', 'EXPORTADO']).delete()
+    
+    novos_registros = []
+    
+    for _, row in df.iterrows():
+        estab = str(row.get('estabelecimento', ''))
+        serie = str(row.get('serie', ''))
+        titulo = str(row.get('titulo', ''))
+        parcela = str(row.get('parcela', ''))
+        
+        # Monta a chave da linha do Excel atual
+        chave_excel = f"{estab}-{serie}-{titulo}-{parcela}"
+        
+        # 3. Se essa nota do Excel já foi trabalhada e está protegida no banco, pula ela!
+        if chave_excel in chaves_protegidas:
+            continue
+
+        # Matemática exata do Excel para o Vl Líquido
+        bruto = Decimal(str(row['vl_bruto_reneg']))
+        impostos = Decimal(str(row['pis'])) + Decimal(str(row['cofins'])) + Decimal(str(row['csll'])) + Decimal(str(row['irrf'])) + Decimal(str(row['iss'])) + Decimal(str(row['inss']))
+        descontos = Decimal(str(row['desconto'])) + Decimal(str(row['liquidacao']))
+        acrescimos = Decimal(str(row['multa'])) + Decimal(str(row['juros']))
+        vl_liq = bruto - impostos - descontos + acrescimos
+
+        novos_registros.append(ContasReceber(
+            estabelecimento=estab,
+            especie=str(row.get('especie', '')),
+            serie=serie,
+            titulo=titulo,
+            parcela=parcela,
+            dt_emissao_orig=row.get('dt_emissao_orig'),
+            dt_vencto_atual=row.get('dt_vencto_atual'),
+            empresa=str(row.get('empresa', '')),
+            cnpj=str(row.get('cnpj_cpf_cliente', '')),
+            nome_abrev=str(row.get('nome_abrev', '')),
+            vl_bruto=bruto,
+            pis=Decimal(str(row['pis'])),
+            cofins=Decimal(str(row['cofins'])),
+            csll=Decimal(str(row['csll'])),
+            irrf=Decimal(str(row['irrf'])),
+            iss=Decimal(str(row['iss'])),
+            inss=Decimal(str(row['inss'])),
+            desconto=Decimal(str(row['desconto'])),
+            abatimento=Decimal(str(row['liquidacao'])),
+            multa=Decimal(str(row['multa'])),
+            juros=Decimal(str(row['juros'])),
+            vl_liquido=vl_liq,
+            carteira=str(row.get('carteira', '')),
+            nosso_numero=str(row.get('nosso_numero', '')),
+            portador=str(row.get('portador', '')),
+            codigo=str(row.get('codigo', '')),
+            segmento=str(row.get('unid_negoc', '')),
+            status='ABERTO' # Garante que as novas entram sempre como pendentes
+        ))
+
+    # Salva tudo de uma vez
+    ContasReceber.objects.bulk_create(novos_registros, batch_size=2000)
+    return True
+
+
+
+def converter_moeda_br(valor_str: str) -> Decimal:
+    """
+    Remove pontos de milhar e converte a vírgula decimal para o formato matemático.
+    """
+    if not valor_str:
+        return Decimal('0.00')
+    
+    try:
+        valor_limpo = str(valor_str).strip().replace('.', '').replace(',', '.')
+        return Decimal(valor_limpo)
+    except (ValueError, InvalidOperation):
+        return Decimal('0.00')

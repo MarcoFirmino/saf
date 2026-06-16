@@ -35,8 +35,27 @@
                     <li class="nav-item">
                         <a class="nav-link" href="{% url 'listar_creditos' %}">Créditos</a>
                     </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="{% url 'suspensos' %}">Suspensos</a>
+                    
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
+                             Conciliação
+                        </a>
+                        <ul class="dropdown-menu shadow">
+                            <li>
+                                <a class="dropdown-item" href="{% url 'importar_extrato' %}">
+                                    <i class="bi bi-cloud-upload me-2"></i> Importação de Extratos
+                                </a>
+                            </li>
+                            <li>
+                                <a class="dropdown-item" href="{% url 'painel_conciliacao' %}">
+                                    <i class="bi bi-layout-split me-2"></i> Painel de Conciliação
+                                </a>
+                            </li>
+                            <li>
+                                <a class="dropdown-item" href="{% url 'creditos_nao_destinados' %}">
+                                    <i class="bi bi-layout-split me-2"></i>Créditos Não Destinados</a>
+                            </li>
+                        </ul>
                     </li>
 
                     <li class="nav-item dropdown">
@@ -68,7 +87,7 @@
                             <li><h6 class="dropdown-header">Outras Fontes</h6></li>
                             <li><a class="dropdown-item" href="{% url 'importar_paycash' %}">Paycash</a></li>
                             <li><a class="dropdown-item" href="{% url 'importar_jur_carga' %}">Jurídico Carga</a></li>
-                            <li><a class="dropdown-item" href="{% url 'importar_consolidado' %}">Consolidado</a></li>
+                            <li><a class="dropdown-item" href="{% url 'importar_consolidado' %}">Consolidado Jurídico</a></li>
                             <li><a class="dropdown-item" href="{% url 'importar_bd_clientes' %}">BD Clientes</a></li>
                         </ul>
                     </li>
@@ -93,6 +112,7 @@
             </div>
         </div>
     </nav>
+    
     <div class="container">
         {% if messages %}
             {% for message in messages %}

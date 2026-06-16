@@ -1,0 +1,77 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card shadow border-0">
+                <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0"><i class="bi bi-bank"></i> Importar Extrato Bancário</h5>
+                </div>
+                <div class="card-body p-4">
+                    
+                    {% if messages %}
+                        {% for message in messages %}
+                            <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+                                {{ message }}
+                                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                            </div>
+                        {% endfor %}
+                    {% endif %}
+
+                    <form method="POST" enctype="multipart/form-data">
+                        {% csrf_token %}
+                        
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <label class="form-label fw-bold">Empresa</label>
+                                <select name="empresa" class="form-select" required>
+                                    <option value="">Selecione...</option>
+                                    <option value="2">2 - Protege Val.</option>
+                                    <option value="4">4 - Proair</option>
+                                    <option value="5">5 - Provig</option>
+                                    <option value="50">50 - Protege Cargo</option>
+                                    <option value="6">6 - Seg. Eletronica</option>
+                                    <option value="7">7 - Serv. Especiais</option>
+                                    <option value="80">80 - Portaria do Futuro</option>
+                                </select>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-bold">Banco</label>
+                                <select name="banco" class="form-select" required>
+                                    <option value="">Selecione...</option>
+                                    <option value="ITAU">Itaú</option>
+                                    <option value="BRADESCO">Bradesco</option>
+                                </select>
+                            </div>
+                            <div class="mb-3">
+                                <label for="data_extrato" class="form-label fw-bold">Data do Movimento (D-1)</label>
+                                <input type="date" name="data_extrato" id="data_extrato" class="form-control" required>
+                                <div class="form-text">O sistema importará APENAS as linhas do extrato que correspondam a esta data.</div>
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Conta Corrente</label>
+                            <input type="text" name="conta_corrente" class="form-control" placeholder="Ex: 124007-2" required>
+                        </div>
+
+                        <div class="mb-4">
+                            <label class="form-label fw-bold">Arquivo do Extrato (.xls, .xlsx, .csv)</label>
+                            <input type="file" name="arquivo" class="form-control" accept=".xls,.xlsx,.csv" required>
+                            <div class="form-text">Faça o download do arquivo diretamente do internet banking e faça o upload aqui.</div>
+                        </div>
+
+                        <div class="d-grid">
+                            <button type="submit" class="btn btn-success btn-lg">
+                                <i class="bi bi-cloud-upload"></i> Processar Arquivo
+                            </button>
+                        </div>
+                    </form>
+
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

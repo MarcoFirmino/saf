@@ -5,11 +5,11 @@ from django.core.paginator import Paginator
 from django.http import JsonResponse
 from django.views.decorators.http import require_POST
 import json
+from django.utils import timezone 
 from django.db.models import Q
 from datetime import datetime
 from decimal import Decimal, ROUND_HALF_UP, InvalidOperation
-from .services import processar_geral_pandas # <--- Certifique-se de importar
-from .services import gerar_excel_contas_receber
+from .services import gerar_excel_contas_receber, processar_geral_pandas, popular_banco_contas_receber 
 from django.shortcuts import render, redirect, get_object_or_404
 from django.http import HttpResponse
 from django.contrib.auth.decorators import login_required
@@ -90,8 +90,6 @@ def password_change_done_custom(request):
 # ==============================================================================
 # IMPORTAR GERAL (Staging e Relatório)
 # ==============================================================================
-
-from django.utils import timezone # <--- Importe isso no topo se não tiver
 
 def normalizar_cabecalho(texto):
     """Limpa acentos, espaços e caracteres especiais do cabeçalho."""
@@ -644,24 +642,38 @@ def relatorio_ar_view(request):
     """
     Página específica para o Relatório de Contas a Receber.
     """
-    # Lógica para o botão de download
     if request.method == 'POST':
+        acao = request.POST.get('acao')
+        
+        # Prevenção: Verifica se a BaseGeral tem dados antes de qualquer ação
         if not BaseGeral.objects.exists():
             messages.error(request, "A base está vazia. Importe o arquivo geral primeiro.")
             return redirect('relatorio_ar')
-            
-        excel_file = gerar_excel_contas_receber()
-        
-        if not excel_file:
-            messages.error(request, "Erro ao gerar planilha.")
+
+        # ===============================================
+        # AÇÃO 1: BOTÃO AZUL (Atualizar Banco)
+        # ===============================================
+        if acao == 'popular_banco':
+            popular_banco_contas_receber()
+            messages.success(request, "Base de Contas a Receber atualizada com sucesso e pronta para a Conciliação!")
             return redirect('relatorio_ar')
 
-        response = HttpResponse(
-            excel_file,
-            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-        )
-        response['Content-Disposition'] = 'attachment; filename="Contas_Receber_Tabela_Dinamica.xlsx"'
-        return response
+        # ===============================================
+        # AÇÃO 2: BOTÃO BRANCO (Baixar Excel Original)
+        # ===============================================
+        elif acao == 'gerar_excel':
+            excel_file = gerar_excel_contas_receber()
+            
+            if not excel_file:
+                messages.error(request, "Erro ao gerar planilha.")
+                return redirect('relatorio_ar')
+
+            response = HttpResponse(
+                excel_file,
+                content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+            )
+            response['Content-Disposition'] = 'attachment; filename="Contas_Receber_Tabela_Dinamica.xlsx"'
+            return response
 
     return render(request, 'analise/relatorio_ar.html')
 
@@ -697,6 +709,7 @@ def processar_relatorio(request):
             
     # Se tentar acessar via GET sem querer, volta para a tela inicial
     return redirect('importar_geral')
+
 @login_required
 def dashboard_inadimplencia(request):
     # 1. Trazemos TODOS os títulos ativos (A base já é filtrada pelo processo de PDD)
@@ -989,6 +1002,7 @@ def renegociacoes_view(request):
     # ==========================================
     # Aging jurídico
     # ==========================================
+
 @login_required
 def aging_juridico_view(request):
     ultima_data = BaseHistoricaRelatorio.objects.filter(aba_origem='Jurídico').aggregate(Max('data_geracao'))['data_geracao__max']
@@ -1072,7 +1086,6 @@ def aging_juridico_view(request):
     }
     
     return render(request, 'analise/aging_juridico.html', context)
-
 
 @login_required
 def gerenciar_resumo(request):
@@ -1292,10 +1305,6 @@ def importar_creditos_view(request):
 
     return render(request, 'analise/importar_creditos.html')
 
-import pandas as pd
-from django.http import HttpResponse
-from .models import CreditoNaoDestinado, HistoricoAbatimento, HistoricoContato
-
 @login_required
 def exportar_creditos_excel(request):
     # Função auxiliar para formatar moeda em PT-BR (Ex: 21000.50 -> 21.000,50)
@@ -1357,8 +1366,12 @@ def exportar_creditos_excel(request):
 
 @login_required
 def listar_creditos(request):
-    # Começamos pegando TODOS os créditos
-    creditos = CreditoNaoDestinado.objects.all().order_by('-data')
+    # ==========================================
+    # O SEGREDO ESTÁ AQUI NA PRIMEIRA LINHA
+    # ==========================================
+    # Trocamos o .all() pelo .exclude()
+    # Isso bloqueia as Exceções (CD-) e deixa passar só os DNIs oficiais.
+    creditos = CreditoNaoDestinado.objects.exclude(dni__startswith='CD-').order_by('-data')
     
     # Capturando os dados digitados nos filtros (se houver)
     f_dni = request.GET.get('dni', '')
