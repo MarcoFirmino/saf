@@ -523,7 +523,6 @@ document.addEventListener('DOMContentLoaded', function() {
             });
         }
     }
-
     // ==============================================================================
     // 8. DISPARO DE E-MAIL (OUTLOOK)
     // ==============================================================================
@@ -557,7 +556,25 @@ document.addEventListener('DOMContentLoaded', function() {
             const valorDep = document.getElementById('valorDepositoEmail') ? document.getElementById('valorDepositoEmail').value : "0,00";
             const dataDep = document.getElementById('dataDepositoEmail') ? document.getElementById('dataDepositoEmail').value : "";
             
-            // 1. PRIMEIRO LÊ OS DADOS DO JSON (CNPJs e Estabs)
+            // ================================================================
+            // NOVIDADE: EXTRAINDO NOME DO CLIENTE E RAIZ DO CNPJ
+            // ================================================================
+            const nomeCliente = document.getElementById('nomeClienteEmail') ? document.getElementById('nomeClienteEmail').value.trim() : "Cliente";
+            let raizCnpj = "";
+            
+            if (cnpjBusca) {
+                // Remove tudo que não for número (pontos, barras, traços)
+                const numerosCnpj = cnpjBusca.replace(/\D/g, ''); 
+                if (numerosCnpj.length >= 8) {
+                    // Pega os 8 primeiros dígitos e formata como XX.XXX.XXX
+                    const r = numerosCnpj.substring(0, 8);
+                    raizCnpj = `${r.substring(0,2)}.${r.substring(2,5)}.${r.substring(5,8)}`;
+                } else {
+                    raizCnpj = cnpjBusca; // Fallback caso venha algo estranho
+                }
+            }
+
+            // 1. LÊ OS DADOS DO JSON (CNPJs e Estabs)
             let dadosEstabsStr = "[]";
             const tagDados = document.getElementById('dadosEstabsJson');
             if (tagDados) {
@@ -565,7 +582,7 @@ document.addEventListener('DOMContentLoaded', function() {
             }
 
             let listaCnpjsTexto = "";
-            let codigoEstabParaValidar = ""; // Vai guardar o número (ex: "404")
+            let codigoEstabParaValidar = ""; 
             const horaAtual = new Date().getHours();
             const saudacao = horaAtual < 12 ? "Bom dia" : "Boa tarde";
 
@@ -575,9 +592,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     const ests = JSON.parse(jsonLimpo);
                     
                     if (ests.length > 0) {
-                        // Pegamos o estab da primeira filial do JSON como base (Ex: 404, 550, etc)
                         codigoEstabParaValidar = String(ests[0].estab);
-
                         listaCnpjsTexto = "\n\nCNPJ(s) para faturamento:\n";
                         ests.forEach(e => {
                             listaCnpjsTexto += `- Estab. ${e.estab}: ${e.cnpj} (${e.empresa})\n`;
@@ -588,37 +603,33 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             }
 
-            // Se o JSON estiver vazio, tenta o fallback do input escondido
             if (!codigoEstabParaValidar) {
                 codigoEstabParaValidar = document.getElementById('nomeEmpresaDeposito') ? document.getElementById('nomeEmpresaDeposito').value.trim() : "";
             }
 
-            // ================================================================
-            // TRADUTOR DE CÓDIGO DA EMPRESA PARA NOME REAL
-            // ================================================================
+            // TRADUTOR DE CÓDIGO DA EMPRESA
             function obterNomeEmpresaPorEstab(estabStr) {
                 if (!estabStr || estabStr === "None") return "Grupo Protege";
-                
                 const estab = String(estabStr).trim();
 
-                // Regras mais específicas (com mais dígitos) DEVEM vir primeiro!
                 if (estab.startsWith("550")) return "Protege Cargo Transportadora";
                 if (estab.startsWith("830")) return "Portaria do Futuro";
-                
-                // Regras de 1 dígito
                 if (estab.startsWith("2")) return "Protege Proteção e Transporte de Valores";
                 if (estab.startsWith("4")) return "Proair Serviços Aux. de Transporte Aereo";
                 if (estab.startsWith("5")) return "Provig Form de Profissionais de Segurança";
                 if (estab.startsWith("6")) return "Protege Segurança Eletronica";
                 if (estab.startsWith("7")) return "Protege Serviços Especiais";
 
-                return "Grupo Protege"; // Fallback padrão se não bater com nada
+                return "Grupo Protege"; 
             }
 
-            // 2. AGORA PASSAMOS O NÚMERO CERTO PARA A FUNÇÃO TRADUZIR
             const nomeEmpresaReal = obterNomeEmpresaPorEstab(codigoEstabParaValidar);
 
-            const assunto = `Composição de pagamentos - ${nomeEmpresaReal}`;
+            // ================================================================
+            // NOVO ASSUNTO COM CLIENTE E RAIZ
+            // ================================================================
+            const assunto = `Composição de pagamentos - ${nomeEmpresaReal} - ${nomeCliente} - CNPJ Raiz: ${raizCnpj}`;
+            
             let corpoEmail = `${saudacao},\n\n`;
             corpoEmail += `Prezado cliente,\n\n`;
             corpoEmail += `Recebemos o crédito de R$ ${valorDep} no dia ${dataDep}, porém não conseguimos compor o pagamento. Pode, por favor, nos enviar a composição?`;

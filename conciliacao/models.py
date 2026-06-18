@@ -120,7 +120,7 @@ class CreditoNaoDestinado(models.Model):
     credito = models.DecimalField(max_digits=15, decimal_places=2, default=0.00, verbose_name="Crédito")
     debitos = models.DecimalField(max_digits=15, decimal_places=2, default=0.00, verbose_name="Débitos")
     saldo_final = models.DecimalField(max_digits=15, decimal_places=2, default=0.00, verbose_name="Saldo Final")
-    
+    observacao = models.TextField(blank=True, null=True, verbose_name="Observação")
     # Informações do Cliente
     cliente = models.CharField(max_length=150, verbose_name="Cliente")
     banco = models.CharField(max_length=5, verbose_name="Banco")

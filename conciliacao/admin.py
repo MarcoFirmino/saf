@@ -49,11 +49,16 @@ class ExcecaoConciliacaoAdmin(admin.ModelAdmin):
     list_display = ('termo', 'descricao')
     search_fields = ('termo',)
 
-@admin.register(ConciliacaoNota)
-class ConciliacaoNotaAdmin(admin.ModelAdmin):
-    list_display = ('extrato', 'nota', 'valor_pago')
-    search_fields = ('extrato__descricao', 'nota__titulo')
-
 @admin.register(ClienteEmail)
 class ClienteEmailAdmin(admin.ModelAdmin):
     list_display = ('cnpj_busca', 'email')
+
+# DEIXAMOS APENAS UMA ÚNICA VERSÃO DA ConciliacaoNota:
+@admin.register(ConciliacaoNota)
+class ConciliacaoNotaAdmin(admin.ModelAdmin):
+    # Juntei os campos de display da versão 2 com os campos de busca da versão 1
+    list_display = ('extrato', 'nota', 'valor_pago', 'impostos_retidos', 'data_conciliacao', 'usuario')
+    search_fields = ('extrato__descricao', 'nota__titulo')
+    
+    # Adicionando o filtro lateral pelo status da nota
+    list_filter = ('nota__status',)

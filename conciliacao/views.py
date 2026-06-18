@@ -178,6 +178,8 @@ def painel_conciliacao(request):
             cliente = request.POST.get('cliente')
 
             dni_digitado = request.POST.get('dni', '').strip()
+            # --- CAPTURANDO A OBSERVAÇÃO ---
+            obs_digitada = request.POST.get('observacao', '').strip()
 
             valor_calculado = converter_moeda_br(valor_str) 
 
@@ -198,7 +200,8 @@ def painel_conciliacao(request):
                 saldo_final=valor_calculado,  # <- Saldo inicial igual ao crédito
                 cliente=cliente,
                 banco=extrato.banco,
-                empresa=empresa
+                empresa=empresa,
+                observacao=obs_digitada
             )
 
             # MUDA O STATUS DO EXTRATO PARA CONCILIADO
@@ -355,22 +358,30 @@ def painel_conciliacao(request):
                 nota_id_limpo = str(nota_id_bruto).replace('.', '')
                 nota = get_object_or_404(ContasReceber, id=int(nota_id_limpo))
                 
+                # Só cria se não existir para não duplicar
                 if not ConciliacaoNota.objects.filter(extrato=extrato, nota=nota).exists():
                     ConciliacaoNota.objects.create(extrato=extrato, nota=nota, valor_pago=nota.vl_liquido)
+                    
+                    # Atualiza o status da nota e salva
                     nota.status = 'CONCILIADO'
                     nota.save()
                     notas_conciliadas_qtd += 1
             
             if notas_conciliadas_qtd > 0:
                 total_usado = ConciliacaoNota.objects.filter(extrato=extrato).aggregate(Sum('valor_pago'))['valor_pago__sum'] or Decimal('0.00')
-                if total_usado >= extrato.valor:
+                
+                # ADICIONAMOS UMA MARGEM DE 0.01 (1 centavo) PARA EVITAR ERRO DE ARREDONDAMENTO (FLOAT)
+                diferenca = extrato.valor - total_usado
+                if diferenca <= Decimal('0.01'): 
                     extrato.status = 'CONCILIADO'
                 else:
                     extrato.status = 'PENDENTE'
+                    
                 extrato.save()
                 messages.success(request, f"Sucesso! {notas_conciliadas_qtd} nota(s) conciliada(s).")
             else:
                 messages.warning(request, "Nenhuma nota foi selecionada.")
+                
             return redirect(f"{request.path}?extrato_id={extrato_id}")
 
         # --- AÇÃO 3: DESFAZER CONCILIAÇÃO ---
@@ -507,9 +518,16 @@ def painel_conciliacao(request):
 # ==============================================================
 # 1. FUNÇÃO DE BAIXAR O LOTE COMPLETO (TELA GESTÃO CONCILIADOS)
 # ==============================================================
+# ==============================================================
+# 1. FUNÇÃO DE BAIXAR O LOTE COMPLETO (TELA GESTÃO CONCILIADOS)
+# ==============================================================
 @login_required
 def exportar_lote_datasul(request, extrato_id=None):
-    relacoes = ConciliacaoNota.objects.filter(nota__status='CONCILIADO').select_related('extrato', 'nota').order_by('extrato__data_transacao')
+    # Se receber um extrato_id, baixa só dele. Se não, baixa de TUDO que for CONCILIADO.
+    if extrato_id:
+        relacoes = ConciliacaoNota.objects.filter(extrato_id=extrato_id, nota__status='CONCILIADO').select_related('extrato', 'nota').order_by('extrato__data_transacao')
+    else:
+        relacoes = ConciliacaoNota.objects.filter(nota__status='CONCILIADO').select_related('extrato', 'nota').order_by('extrato__data_transacao')
     
     if not relacoes.exists():
         messages.warning(request, "Nenhuma nota pendente de exportação encontrada.")
@@ -520,106 +538,6 @@ def exportar_lote_datasul(request, extrato_id=None):
     worksheet = workbook.add_worksheet('Lote Datasul')
     
     # FORMATOS DO EXCEL
-    fmt_texto = workbook.add_format({'num_format': '@'}) 
-    fmt_numero = workbook.add_format({'num_format': '0.00'}) # Formato de número com 2 casas decimais
-    
-    cabecalho = [
-        'Estabelec', 'Espécie', 'Série', 'Título', 'Parcela', 
-        'Dt.Emissão Orig', 'Dt.Vencto Atual', 'Empresa', 'CNPJ', 
-        'Nome Abrev', 'Vl.Bruto', 'PIS', 'Cofins', 'CSLL', 'IRRF', 
-        'ISS', 'INSS', 'Desconto', 'Abatimento', 'Multa', 'Juros', 
-        'Vl.líquido', 'Carteira'
-    ]
-    
-    for col_num, nome_col in enumerate(cabecalho):
-        worksheet.write(0, col_num, nome_col)
-    
-    def date_to_excel(dt):
-        if not dt: return ''
-        if isinstance(dt, str):
-            try:
-                dt = datetime.strptime(dt, '%Y-%m-%d').date()
-            except Exception:
-                return dt
-        d = dt.date() if hasattr(dt, 'date') else dt
-        return (d - date(1899, 12, 30)).days
-
-    def to_float(v):
-        try:
-            return float(v)
-        except (ValueError, TypeError):
-            return 0.0
-    def to_int(v):
-        try:
-            # Transforma em float primeiro para evitar erros se o número vier como "1234.0"
-            return int(float(str(v).strip()))
-        except (ValueError, TypeError):
-            # Se por acaso vier uma letra no título, devolve como texto para não perder a informação
-            return str(v).strip()
-
-    notas_atualizadas = []
-    for row_num, rel in enumerate(relacoes, 1):
-        nota = rel.nota
-        
-        estab_str = str(nota.estabelecimento).replace('.0', '').strip()
-        parcela_str = str(nota.parcela).replace('.0', '').strip().zfill(2)
-        empresa_str = str(nota.empresa).replace('.0', '').strip().zfill(2)
-        carteira_str = str(nota.carteira).replace('.0', '').strip()
-        
-        worksheet.write(row_num, 0, estab_str, fmt_texto)
-        worksheet.write(row_num, 1, str(nota.especie).strip())
-        worksheet.write(row_num, 2, str(nota.serie).strip())
-        worksheet.write(row_num, 3, to_int(nota.titulo))
-        worksheet.write(row_num, 4, parcela_str, fmt_texto)
-        worksheet.write(row_num, 5, date_to_excel(nota.dt_emissao_orig))
-        worksheet.write(row_num, 6, date_to_excel(nota.dt_vencto_atual))
-        worksheet.write(row_num, 7, empresa_str, fmt_texto)
-        worksheet.write(row_num, 8, str(nota.cnpj).strip())
-        worksheet.write(row_num, 9, str(nota.nome_abrev).strip())
-        
-        # Agora são gravados como NÚMEROS reais para o Excel
-        worksheet.write_number(row_num, 10, to_float(nota.vl_bruto), fmt_numero)
-        worksheet.write_number(row_num, 11, to_float(nota.pis), fmt_numero)
-        worksheet.write_number(row_num, 12, to_float(nota.cofins), fmt_numero)
-        worksheet.write_number(row_num, 13, to_float(nota.csll), fmt_numero)
-        worksheet.write_number(row_num, 14, to_float(nota.irrf), fmt_numero)
-        worksheet.write_number(row_num, 15, to_float(nota.iss), fmt_numero)
-        worksheet.write_number(row_num, 16, to_float(nota.inss), fmt_numero)
-        worksheet.write_number(row_num, 17, to_float(nota.desconto), fmt_numero)
-        worksheet.write_number(row_num, 18, to_float(nota.abatimento), fmt_numero)
-        worksheet.write_number(row_num, 19, to_float(nota.multa), fmt_numero)
-        worksheet.write_number(row_num, 20, to_float(nota.juros), fmt_numero)
-        worksheet.write_number(row_num, 21, to_float(nota.vl_liquido), fmt_numero)
-        
-        worksheet.write(row_num, 22, carteira_str, fmt_texto)
-        
-        nota.status = 'EXPORTADO'
-        notas_atualizadas.append(nota)
-        
-    ContasReceber.objects.bulk_update(notas_atualizadas, ['status'])
-    
-    workbook.close()
-    output.seek(0)
-    
-    nome_arquivo = f'lote_datasul_{datetime.now().strftime("%Y%m%d_%H%M")}.xlsx'
-    response = HttpResponse(output, content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-    response['Content-Disposition'] = f'attachment; filename="{nome_arquivo}"'
-    
-    messages.success(request, f"Lote Excel gerado com sucesso! {len(notas_atualizadas)} notas baixadas.")
-    return response
-
-
-    extrato = get_object_or_404(ExtratoBancario, id=extrato_id)
-    relacoes = ConciliacaoNota.objects.filter(extrato=extrato).select_related('nota')
-    
-    if not relacoes.exists():
-        messages.warning(request, "Nenhuma nota encontrada para este depósito.")
-        return redirect(f"/conciliacao/painel/?extrato_id={extrato_id}")
-
-    output = io.BytesIO()
-    workbook = xlsxwriter.Workbook(output, {'in_memory': True})
-    worksheet = workbook.add_worksheet('Lote Datasul')
-    
     fmt_texto = workbook.add_format({'num_format': '@'}) 
     fmt_numero = workbook.add_format({'num_format': '0.00'}) 
     
@@ -645,11 +563,14 @@ def exportar_lote_datasul(request, extrato_id=None):
         return (d - date(1899, 12, 30)).days
 
     def to_float(v):
-        try:
-            return float(v)
-        except (ValueError, TypeError):
-            return 0.0
+        try: return float(v)
+        except (ValueError, TypeError): return 0.0
+        
+    def to_int(v):
+        try: return int(float(str(v).strip()))
+        except (ValueError, TypeError): return str(v).strip()
 
+    notas_atualizadas = []
     for row_num, rel in enumerate(relacoes, 1):
         nota = rel.nota
         
@@ -661,7 +582,7 @@ def exportar_lote_datasul(request, extrato_id=None):
         worksheet.write(row_num, 0, estab_str, fmt_texto)
         worksheet.write(row_num, 1, str(nota.especie).strip())
         worksheet.write(row_num, 2, str(nota.serie).strip())
-        worksheet.write(row_num, 3, str(nota.titulo).strip())
+        worksheet.write(row_num, 3, to_int(nota.titulo))
         worksheet.write(row_num, 4, parcela_str, fmt_texto)
         worksheet.write(row_num, 5, date_to_excel(nota.dt_emissao_orig))
         worksheet.write(row_num, 6, date_to_excel(nota.dt_vencto_atual))
@@ -684,17 +605,24 @@ def exportar_lote_datasul(request, extrato_id=None):
         
         worksheet.write(row_num, 22, carteira_str, fmt_texto)
         
+        # O PULO DO GATO: Muda o status e tira da tela de Gestão!
+        nota.status = 'EXPORTADO'
+        notas_atualizadas.append(nota)
+        
+    ContasReceber.objects.bulk_update(notas_atualizadas, ['status'])
+    
     workbook.close()
     output.seek(0)
     
-    dt_str = extrato.data_transacao.strftime("%d%m%Y") if extrato.data_transacao else datetime.now().strftime("%d%m%Y")
-    nome_arquivo = f"{extrato.id}_{extrato.banco}_{dt_str}.xlsx"
-    
+    nome_arquivo = f'lote_datasul_{datetime.now().strftime("%Y%m%d_%H%M")}.xlsx'
     response = HttpResponse(output, content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
     response['Content-Disposition'] = f'attachment; filename="{nome_arquivo}"'
     
+    messages.success(request, f"Lote Excel gerado com sucesso! {len(notas_atualizadas)} notas baixadas.")
     return response
-
+# ==============================================================
+# 2. GESTÃO DE CONCILIADOS
+# ==============================================================
 @login_required
 def gestao_conciliados(request):
     if request.method == 'POST':
@@ -710,33 +638,43 @@ def gestao_conciliados(request):
             rel.delete()
 
             total_usado = ConciliacaoNota.objects.filter(extrato=extrato).aggregate(Sum('valor_pago'))['valor_pago__sum'] or Decimal('0.00')
+            
             if total_usado < extrato.valor:
                 extrato.status = 'PENDENTE'
-            extrato.save()
+                extrato.save()
 
             messages.success(request, f"Nota {nota.titulo} desfeita! Depósito liberado parcialmente.")
             return redirect('gestao_conciliados')
 
-    extratos_ids = ConciliacaoNota.objects.filter(nota__status='CONCILIADO').values_list('extrato_id', flat=True).distinct()
+    # AQUI ESTÁ A REGRA QUE VOCÊ DESCREVEU:
+    # 1. Pega todas as relações de conciliação cuja NOTA está EXATAMENTE como 'CONCILIADO'
+    relacoes_pendentes = ConciliacaoNota.objects.filter(nota__status='CONCILIADO')
+    
+    # 2. Descobre os IDs dos extratos apenas dessas relações
+    extratos_ids = relacoes_pendentes.values_list('extrato_id', flat=True).distinct()
     extratos = ExtratoBancario.objects.filter(id__in=extratos_ids).order_by('-data_transacao')
 
     tabela_dados = []
     for extrato in extratos:
+        # Puxa as notas prontas para descer para o Datasul
         relacoes = ConciliacaoNota.objects.filter(extrato=extrato, nota__status='CONCILIADO').select_related('nota')
+        
         if relacoes.exists():
-            total_usado = sum(rel.valor_pago for rel in relacoes)
+            total_usado_na_tela = sum(rel.valor_pago for rel in relacoes)
+            
+            # Para o saldo restante do extrato, precisamos calcular TUDO que ele já pagou 
+            # (mesmo o que já foi exportado, senão o saldo aparece errado)
             total_geral_extrato = ConciliacaoNota.objects.filter(extrato=extrato).aggregate(Sum('valor_pago'))['valor_pago__sum'] or Decimal('0.00')
             saldo_restante = extrato.valor - total_geral_extrato
 
             tabela_dados.append({
                 'extrato': extrato,
                 'relacoes': relacoes,
-                'total_usado': total_usado,
+                'total_usado': total_usado_na_tela,
                 'saldo_restante': saldo_restante,
             })
 
     return render(request, 'conciliacao/gestao_conciliados.html', {'tabela_dados': tabela_dados})
-
 @login_required
 def notas_baixadas(request):
 
@@ -858,9 +796,10 @@ def painel_creditos_nao_destinados(request):
     if request.method == 'POST':
         acao = request.POST.get('acao')
         if acao == 'cancelar_credito':
-            # Como a Chave Primária é o DNI, pegamos ele do formulário
-            credito_dni = request.POST.get('credito_id')
-            credito = get_object_or_404(CreditoNaoDestinado, dni=credito_dni)
+            # Buscando pela ID numérica enviada pelo HTML
+            # Pegamos o DNI enviado pelo HTML
+            dni_recebido = request.POST.get('credito_id')
+            credito = get_object_or_404(CreditoNaoDestinado, dni=dni_recebido)
             
             # Devolve para o painel de conciliação usando a regra do prefixo CD-
             if credito.dni.startswith('CD-'):

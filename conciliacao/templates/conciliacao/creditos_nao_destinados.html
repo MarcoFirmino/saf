@@ -13,6 +13,7 @@
                 <th>Crédito Original</th>
                 <th>Saldo Disponível</th>
                 <th>Ações</th>
+                <th>Observação</th>
             </tr>
         </thead>
         <tbody>
@@ -23,12 +24,13 @@
                 <td>{{ c.banco }}</td>
                 <td>{{ c.cliente }}</td>
                 <td>R$ {{ c.credito }}</td>
+                <td>{{ c.observacao|default:"-" }}</td>
                 <td class="text-success fw-bold">R$ {{ c.saldo_final }}</td>
                 <td>
                     <form method="POST" action="" onsubmit="return confirm('Tem certeza que deseja cancelar este crédito e devolver o depósito aos pendentes?');">
                         {% csrf_token %}
                         <input type="hidden" name="acao" value="cancelar_credito">
-                        <input type="hidden" name="credito_id" value="{{ c.id }}">
+                        <input type="hidden" name="credito_id" value="{{ c.dni }}">
                         <button type="submit" class="btn btn-sm btn-danger">Cancelar / Retornar</button>
                     </form>
                 </td>

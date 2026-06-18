@@ -19,7 +19,7 @@
                         <div class="row g-2">
                             <div class="col-6">
                                 <select name="filtro_banco" class="form-select form-select-sm shadow-none" onchange="this.form.submit()">
-                                    <option value="">Todos Bancos</option>
+                                    <option value="">Bancos</option>
                                     {% for banco in bancos_disponiveis %}
                                         <option value="{{ banco }}" {% if banco == filtro_banco %}selected{% endif %}>{{ banco }}</option>
                                     {% endfor %}
@@ -27,7 +27,7 @@
                             </div>
                             <div class="col-6">
                                 <select name="filtro_empresa" class="form-select form-select-sm shadow-none" onchange="this.form.submit()">
-                                    <option value="">Todas Empresas</option>
+                                    <option value="">Empresas</option>
                                     {% for emp in empresas_disponiveis %}
                                         <option value="{{ emp }}" {% if emp == filtro_empresa %}selected{% endif %}>Empresa {{ emp }}</option>
                                     {% endfor %}
@@ -410,6 +410,12 @@
                                     <label class="form-label fw-bold text-muted small">Cliente / Origem *</label>
                                     <input type="text" name="cliente" class="form-control" value="{{ extrato_selecionado.descricao }}" required>
                                 </div>
+                                <div class="row mt-3">
+                                    <div class="col-12">
+                                        <label class="form-label fw-bold text-secondary">Observação (Opcional)</label>
+                                        <textarea class="form-control" name="observacao" rows="2" placeholder="Ex: Aguardando retorno do cliente sobre a nota X..."></textarea>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                         <div class="modal-footer">
@@ -498,6 +504,11 @@
 <input type="hidden" id="cnpjAtivoBusca" value="{{ extrato_selecionado.cnpj_cpf|default:'' }}">
 <input type="hidden" id="valorDepositoEmail" value="{{ extrato_selecionado.saldo_restante|floatformat:2 }}">
 <input type="hidden" id="dataDepositoEmail" value="{{ extrato_selecionado.data_transacao|date:'d/m/Y' }}">
+{% if extrato_selecionado %}
+    <input type="hidden" id="nomeClienteEmail" value="{{ extrato_selecionado.razao_social|default:extrato_selecionado.descricao }}">
+{% else %}
+    <input type="hidden" id="nomeClienteEmail" value="">
+{% endif %}
 <script type="application/json" id="dadosEstabsJson">{{ dados_estabelecimentos|safe }}</script>
 
 <script src="{% static 'js/painel_conciliacao.js' %}"></script>
