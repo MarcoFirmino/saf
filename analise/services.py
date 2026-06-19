@@ -7,10 +7,12 @@ from .auxiliar import aplicar_regras_banco
 from .etl_relatorios import popular_banco_relatorio
 from decimal import Decimal, InvalidOperation
 
+from django.contrib.auth.decorators import login_required
 
 # =============================================================================
 # FUNÇÃO 1: RELATÓRIO GERAL (Relatório Completo / Staging)
 # =============================================================================
+@login_required
 def processar_geral_pandas(request, data_corte_str, data_correcao_str):
     """
     Função de Tratamento Completo lendo da Tabela BaseGeral.
@@ -105,11 +107,46 @@ def processar_geral_pandas(request, data_corte_str, data_correcao_str):
     df_final['Vl.Bruto Orig.'] = df[cols_origem['vl_bruto']]
     df_final['Vl.líquido'] = df[cols_origem['vl_liquido']]
     
+    # --- FUNÇÃO DE LIMPEZA PARA A CHAVE (Garante que "404.0" vire "404") ---
+    def limpar_chave_pd(serie_pd):
+        return serie_pd.astype(str).str.replace(r'\.0$', '', regex=True).str.replace('nan', '').str.strip()
+
     df_final['Regional'] = (
-        df_final['Estabelec'].astype(str).str.strip() +
-        df_final['Série'].astype(str).str.strip() +
-        df_final['Título'].astype(str).str.strip()
+        limpar_chave_pd(df_final['Estabelec']) +
+        limpar_chave_pd(df_final['Série']) +
+        limpar_chave_pd(df_final['Título'])
     )
+
+    # =========================================================
+    # NOVA REGRA: EXCLUIR NOTAS TOTALMENTE BAIXADAS (CONCILIADAS)
+    # =========================================================
+    from .models import ContasReceber
+    
+    # =========================================================
+    # NOVA REGRA: EXCLUIR NOTAS TOTALMENTE BAIXADAS
+    # =========================================================
+    from .models import ContasReceber 
+    
+    # 1. Pega do banco as notas baixadas (buscando tanto CONCILIADO quanto EXPORTADO)
+    notas_baixadas = ContasReceber.objects.filter(
+        status__in=['CONCILIADO', 'EXPORTADO', 'EXPORADO'] # Coloquei "EXPORADO" também caso tenha sido erro de digitação no banco!
+    ).values_list('estabelecimento', 'serie', 'titulo')
+    
+    chaves_excluir = set()
+    for estab, serie, titulo in notas_baixadas:
+        # Limpa o DB do mesmo jeito que limpamos o Pandas
+        estab_str = str(estab).replace('.0', '').strip() if estab not in [None, 'nan'] else ""
+        serie_str = str(serie).strip() if serie not in [None, 'nan'] else ""
+        titulo_str = str(titulo).replace('.0', '').strip() if titulo not in [None, 'nan'] else ""
+        
+        chave_db = estab_str + serie_str + titulo_str
+        chaves_excluir.add(chave_db)
+        
+    # 2. Filtra o relatório, MANTENDO apenas quem NÃO ESTÁ (~) na lista de exclusão
+    df_final = df_final[~df_final['Regional'].isin(chaves_excluir)]
+   
+    # =========================================================
+
     df_final['Base Operacional'] = df_final['Estabelec']
     df_final['Carteira'] = "" 
     df_final['Pacote'] = ""

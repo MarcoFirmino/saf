@@ -163,6 +163,13 @@ def painel_conciliacao(request):
     # ==========================================
     if request.method == 'POST':
         acao = request.POST.get('acao')
+        # Recupera os filtros atuais (pode vir do formulário POST ou da URL GET)
+        f_banco = request.POST.get('filtro_banco', '') or request.GET.get('filtro_banco', '')
+        f_empresa = request.POST.get('filtro_empresa', '') or request.GET.get('filtro_empresa', '')
+        f_data = request.POST.get('filtro_data', '') or request.GET.get('filtro_data', '')
+        
+        # Cria a string com os filtros para plugar nas URLs de redirecionamento
+        query_filtros = f"&filtro_banco={f_banco}&filtro_empresa={f_empresa}&filtro_data={f_data}"
         
         # ==============================================================
         # NOVA AÇÃO: GERAR CRÉDITO DE EXCEÇÃO (Refatorado com Service)
@@ -208,9 +215,9 @@ def painel_conciliacao(request):
             extrato.status = 'CONCILIADO'
             extrato.save()
 
-            # Exibe a mensagem dinâmica baseada na regra e redireciona
+            # Exibe a mensagem dinâmica baseada na regra e redireciona (COM FILTROS)
             messages.success(request, mensagem)
-            return redirect(f"/conciliacao/painel/?extrato_id={extrato.id}")
+            return redirect(f"/conciliacao/painel/?extrato_id={extrato.id}{query_filtros}")
         
         # =========================================================
         # AÇÃO: IMPORTAR COMPOSIÇÃO DE PAGAMENTO (EXCEL)
@@ -312,10 +319,22 @@ def painel_conciliacao(request):
                     descontos = nota.desconto + nota.abatimento
                     acrescimos = nota.multa + nota.juros
                     
+                    # 1. Calcula o novo valor líquido
                     nota.vl_liquido = nota.vl_bruto - impostos - descontos + acrescimos
                     nota.save()
                     
-                    return JsonResponse({'status': 'sucesso', 'novo_saldo': float(nota.vl_liquido)})
+                    # 2. Calcula a Variação Percentual baseada na regra do Excel
+                    variacao_percentual = 0.0
+                    if nota.vl_bruto and nota.vl_bruto > 0:
+                        # (Valor Pago / Valor Bruto) * 100 - 100
+                        variacao_percentual = float((nota.vl_liquido / nota.vl_bruto) * 100 - 100)
+                    
+                    # 3. Devolvemos o saldo e a variação prontinhos para a tela
+                    return JsonResponse({
+                        'status': 'sucesso', 
+                        'novo_saldo': float(nota.vl_liquido),
+                        'variacao': variacao_percentual
+                    })
                 except Exception as e:
                     return JsonResponse({'status': 'erro', 'message': str(e)}, status=400)
 
@@ -346,7 +365,8 @@ def painel_conciliacao(request):
                 )
                 ExtratoBancario.objects.filter(descricao=extrato.descricao).update(cnpj_cpf=cnpj_formatado)
                 messages.success(request, "CNPJ vinculado com sucesso! O sistema já aprendeu essa regra.")
-            return redirect(f"{request.path}?extrato_id={extrato_id}")
+            # Redireciona COM FILTROS
+            return redirect(f"{request.path}?extrato_id={extrato_id}{query_filtros}")
 
         # --- AÇÃO 2: CONCILIAR MÚLTIPLAS NOTAS ---
         elif acao == 'conciliar_multiplas' and extrato_id:
@@ -382,7 +402,8 @@ def painel_conciliacao(request):
             else:
                 messages.warning(request, "Nenhuma nota foi selecionada.")
                 
-            return redirect(f"{request.path}?extrato_id={extrato_id}")
+            # Redireciona COM FILTROS
+            return redirect(f"{request.path}?extrato_id={extrato_id}{query_filtros}")
 
         # --- AÇÃO 3: DESFAZER CONCILIAÇÃO ---
         elif acao == 'desfazer_conciliacao' and extrato_id:
@@ -396,7 +417,8 @@ def painel_conciliacao(request):
             extrato.status = 'PENDENTE'
             extrato.save()
             messages.success(request, "Conciliação desfeita! O depósito e as notas voltaram para a fila.")
-            return redirect(f"{request.path}?extrato_id={extrato_id}")
+            # Redireciona COM FILTROS
+            return redirect(f"{request.path}?extrato_id={extrato_id}{query_filtros}")
 
     # ==========================================
     # 2. CARREGAMENTO DA TELA (GET)
@@ -404,7 +426,8 @@ def painel_conciliacao(request):
     extrato_id = request.GET.get('extrato_id')
     filtro_banco = request.GET.get('filtro_banco', '')
     filtro_empresa = request.GET.get('filtro_empresa', '')
-    
+    filtro_data = request.GET.get('filtro_data', '')
+
     # --- Mantendo apenas PENDENTES no painel lateral ---
     bancos_disponiveis = ExtratoBancario.objects.filter(
         status='PENDENTE', valor__gt=0
@@ -423,6 +446,9 @@ def painel_conciliacao(request):
 
     if filtro_empresa:
         query_extratos = query_extratos.filter(empresa=filtro_empresa)
+
+    if filtro_data: # <-- APLICANDO O NOVO FILTRO
+        query_extratos = query_extratos.filter(data_transacao=filtro_data)
         
     extratos_pendentes_qs = query_extratos.order_by('data_transacao')
 
@@ -513,6 +539,7 @@ def painel_conciliacao(request):
         'filtro_empresa': filtro_empresa,
         'email_salvo': email_salvo,
         'dados_estabelecimentos': json.dumps(dados_estabelecimentos),
+        'filtro_data': filtro_data,
     }
     return render(request, 'conciliacao/painel.html', context)
 # ==============================================================

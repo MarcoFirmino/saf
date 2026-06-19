@@ -124,9 +124,8 @@ document.addEventListener('DOMContentLoaded', function() {
             const camposAcrescimo = ['inp-multa', 'inp-juros'];
             
             let deducoes = 0, acrescimos = 0;
-            let totalPercTaxas = 0; // Acumulador da percentagem total de impostos
+            let totalPercTaxas = 0; 
 
-            // MÁGICA DOS PERCENTUAIS DE IMPOSTOS
             const listaImpostos = ['pis', 'cofins', 'csll', 'irrf', 'iss', 'inss'];
             listaImpostos.forEach(taxa => {
                 const val = parseFloat(document.getElementById(`inp-${taxa}`).value) || 0;
@@ -142,14 +141,12 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             });
 
-            // Adiciona descontos e abatimentos que não têm label de percentagem individual
             ['inp-desconto', 'inp-abatimento'].forEach(id => {
                 deducoes += (parseFloat(document.getElementById(id).value) || 0);
             });
 
             camposAcrescimo.forEach(id => acrescimos += (parseFloat(document.getElementById(id).value) || 0));
             
-            // Atualiza o TOTAL TX no cabeçalho
             const totalTxSpan = document.getElementById('ajuste-total-tx');
             if (totalTxSpan) {
                 if (totalPercTaxas > 0) {
@@ -165,17 +162,30 @@ document.addEventListener('DOMContentLoaded', function() {
             const difEl = document.getElementById('calc-diferenca');
             const excelAttr = painelImpostos.getAttribute('data-excel');
             
-            let valorBaseVariacao = novoSaldo;
-            if (excelAttr && parseFloat(excelAttr) > 0) {
-                valorBaseVariacao = parseFloat(excelAttr);
-            }
+            // =================================================================
+            // CORREÇÃO DO CÁLCULO DE VARIAÇÃO (MÉTODO EXCEL)
+            // =================================================================
+            // No Excel: =([Vlr. Pago]/[Vl.Bruto]) * 100 - 100
+            // 1. O Vlr. Pago por padrão é o valor do Depósito bancário
+            let valorPagoCliente = valorDeposito; 
             
-            const variacao = bruto > 0 ? (valorBaseVariacao / bruto) - 1 : 0;
-            const varEl = document.getElementById('calc-variacao');
-            if (varEl) {
-                varEl.innerText = (variacao * 100).toFixed(2).replace('.', ',') + '%';
+            // 2. Mas se a nota veio de uma importação de Excel, usamos o valor do Excel
+            if (excelAttr && parseFloat(excelAttr) > 0) {
+                valorPagoCliente = parseFloat(excelAttr);
             }
 
+            // 3. Aplica a fórmula exata
+            let variacao = 0;
+            if (bruto > 0) {
+                variacao = (valorPagoCliente / bruto) * 100 - 100;
+            }
+            
+            const varEl = document.getElementById('calc-variacao');
+            if (varEl) {
+                varEl.innerText = variacao.toFixed(2).replace('.', ',') + '%';
+            }
+
+            // --- CÁLCULO DA DIFERENÇA FINANCEIRA ---
             if (difEl) {
                 let diferencaImposto = 0;
                 if (excelAttr) {
@@ -198,6 +208,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 difEl.innerText = diferencaImposto.toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'});
                 difEl.className = Math.abs(diferencaImposto) < 0.01 ? 'fw-bold text-success' : 'fw-bold text-danger';
             }
+        
         }
 
         // Removemos o evento 'input' dos txt-inputs aqui, e passamos a usar o evento 'change' da calculadora mais abaixo.

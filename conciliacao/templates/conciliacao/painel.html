@@ -18,23 +18,37 @@
                         
                         <div class="row g-2">
                             <div class="col-6">
-                                <select name="filtro_banco" class="form-select form-select-sm shadow-none" onchange="this.form.submit()">
+                                <select name="filtro_banco" class="form-select form-select-sm" onchange="this.form.submit()">
                                     <option value="">Bancos</option>
                                     {% for banco in bancos_disponiveis %}
-                                        <option value="{{ banco }}" {% if banco == filtro_banco %}selected{% endif %}>{{ banco }}</option>
+                                        <option value="{{ banco }}" {% if banco == filtro_banco %}selected{% endif %}>
+                                            {{ banco }}
+                                        </option>
                                     {% endfor %}
+                                </select>
                                 </select>
                             </div>
                             <div class="col-6">
-                                <select name="filtro_empresa" class="form-select form-select-sm shadow-none" onchange="this.form.submit()">
+                                <select name="filtro_empresa" class="form-select form-select-sm" onchange="this.form.submit()">
                                     <option value="">Empresas</option>
-                                    {% for emp in empresas_disponiveis %}
-                                        <option value="{{ emp }}" {% if emp == filtro_empresa %}selected{% endif %}>Empresa {{ emp }}</option>
+                                    {% for empresa in empresas_disponiveis %}
+                                        <option value="{{ empresa }}" {% if empresa == filtro_empresa %}selected{% endif %}>
+                                            {{ empresa }}
+                                        </option>
                                     {% endfor %}
                                 </select>
                             </div>
                         </div>
-                        </form>
+                       </form>
+                        <form method="GET" action="{% url 'painel_conciliacao' %}" id="formFiltrosPainel">
+                            <input type="hidden" name="extrato_id" value="{{ extrato_selecionado.id|default:'' }}">
+                            <div class="row g-2 mb-3">
+                                <div class="col-12 gap-2">
+                                    <input type="date" name="filtro_data" class="form-control form-control-sm" value="{{ filtro_data }}" onchange="this.form.submit()" title="Filtrar por data do depósito">
+                                </div>
+                            </div>
+                            <a href="?extrato_id={{ ex.id }}&filtro_banco={{ filtro_banco }}&filtro_empresa={{ filtro_empresa }}&filtro_data={{ filtro_data }}" class="list-group-item list-group-item-action"></a>
+                            </form>
                     
                     <div class="d-grid gap-2 mb-2">
                         <a href="{% url 'gestao_conciliados' %}" class="btn btn-outline-light btn-sm shadow-sm">
@@ -44,9 +58,9 @@
                 </div>
                 
                 <div class="list-group list-group-flush" style="max-height: 80vh; overflow-y: auto;">
-                    {% for extrato in extratos_pendentes %}
-                        <a href="?extrato_id={{ extrato.id }}{% if filtro_banco %}&filtro_banco={{ filtro_banco }}{% endif %}{% if filtro_empresa %}&filtro_empresa={{ filtro_empresa }}{% endif %}" 
-                           class="list-group-item list-group-item-action {% if extrato_selecionado and extrato_selecionado.id == extrato.id %}active bg-primary text-white{% endif %}">
+                   {% for extrato in extratos_pendentes %}
+                        <a href="?extrato_id={{ extrato.id }}{% if filtro_banco %}&filtro_banco={{ filtro_banco }}{% endif %}{% if filtro_empresa %}&filtro_empresa={{ filtro_empresa }}{% endif %}{% if filtro_data %}&filtro_data={{ filtro_data }}{% endif %}" 
+                        class="list-group-item list-group-item-action {% if extrato_selecionado and extrato_selecionado.id == extrato.id %}active bg-primary text-white{% endif %}">
                             <div class="d-flex w-100 justify-content-between align-items-center">
                                 <small class="fw-bold">
                                     {% if extrato.status == 'CONCILIADO' %}
@@ -69,12 +83,12 @@
                                 <strong>CNPJ:</strong> {{ extrato.cnpj_cpf|default:"Não identificado" }}
                             </small>
                         </a>
-                    {% empty %}
+                        {% empty %}
                         <div class="p-4 text-center text-muted">
                             <i class="bi bi-check-circle display-4"></i>
                             <p class="mt-2">Nenhum depósito listado.</p>
                         </div>
-                    {% endfor %}
+                    {% endfor %} 
                 </div>
             </div>
         </div>
