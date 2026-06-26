@@ -3,6 +3,7 @@
 {% load humanize %}
 
 {% block content %}
+<link rel="stylesheet" href="{% static 'css/painel.css' %}">
 <div class="container-fluid mt-3">
     <div class="row">
         
@@ -11,12 +12,12 @@
                 <div class="card-header bg-dark text-white p-3">
                     <h6 class="mb-2"><i class="bi bi-bank"></i> Depósitos do Dia</h6>
                     
-                    <form method="GET" action="" class="m-0 mb-2">
+                    <form method="GET" action="{% url 'painel_conciliacao' %}" id="formFiltrosPainel" class="m-0 mb-3">
                         {% if extrato_selecionado %}
                             <input type="hidden" name="extrato_id" value="{{ extrato_selecionado.id }}">
                         {% endif %}
                         
-                        <div class="row g-2">
+                        <div class="row g-2 mb-2">
                             <div class="col-6">
                                 <select name="filtro_banco" class="form-select form-select-sm" onchange="this.form.submit()">
                                     <option value="">Bancos</option>
@@ -25,7 +26,6 @@
                                             {{ banco }}
                                         </option>
                                     {% endfor %}
-                                </select>
                                 </select>
                             </div>
                             <div class="col-6">
@@ -39,16 +39,25 @@
                                 </select>
                             </div>
                         </div>
-                       </form>
-                        <form method="GET" action="{% url 'painel_conciliacao' %}" id="formFiltrosPainel">
-                            <input type="hidden" name="extrato_id" value="{{ extrato_selecionado.id|default:'' }}">
-                            <div class="row g-2 mb-3">
-                                <div class="col-12 gap-2">
-                                    <input type="date" name="filtro_data" class="form-control form-control-sm" value="{{ filtro_data }}" onchange="this.form.submit()" title="Filtrar por data do depósito">
-                                </div>
+                        
+                        <div class="row g-2">
+                            <div class="col-12 gap-2">
+                                <input type="date" name="filtro_data" class="form-control form-control-sm" value="{{ filtro_data }}" onchange="this.form.submit()" title="Filtrar por data do depósito">
                             </div>
-                            <a href="?extrato_id={{ ex.id }}&filtro_banco={{ filtro_banco }}&filtro_empresa={{ filtro_empresa }}&filtro_data={{ filtro_data }}" class="list-group-item list-group-item-action"></a>
-                            </form>
+                        </div>
+                    </form>
+                    
+                    <form method="POST" action="">
+                        {% csrf_token %}
+                        <input type="hidden" name="acao" value="rodar_automacao">
+                        <input type="hidden" name="filtro_banco" value="{{ filtro_banco }}">
+                        <input type="hidden" name="filtro_empresa" value="{{ filtro_empresa }}">
+                        <input type="hidden" name="filtro_data" value="{{ filtro_data }}">
+                        
+                        <button type="submit" class="btn btn-primary w-100 mb-3 shadow-sm" onclick="this.innerHTML='<i class=\'bi bi-hourglass-split\'></i> Analisando...';">
+                            <i class="bi bi-robot"></i> Rodar Automação Itaú
+                        </button>
+                    </form>
                     
                     <div class="d-grid gap-2 mb-2">
                         <a href="{% url 'gestao_conciliados' %}" class="btn btn-outline-light btn-sm shadow-sm">
@@ -59,30 +68,42 @@
                 
                 <div class="list-group list-group-flush" style="max-height: 80vh; overflow-y: auto;">
                    {% for extrato in extratos_pendentes %}
-                        <a href="?extrato_id={{ extrato.id }}{% if filtro_banco %}&filtro_banco={{ filtro_banco }}{% endif %}{% if filtro_empresa %}&filtro_empresa={{ filtro_empresa }}{% endif %}{% if filtro_data %}&filtro_data={{ filtro_data }}{% endif %}" 
-                        class="list-group-item list-group-item-action {% if extrato_selecionado and extrato_selecionado.id == extrato.id %}active bg-primary text-white{% endif %}">
-                            <div class="d-flex w-100 justify-content-between align-items-center">
-                                <small class="fw-bold">
-                                    {% if extrato.status == 'CONCILIADO' %}
-                                        <i class="bi bi-check-circle-fill text-success me-1" title="Já Conciliado"></i>
-                                    {% endif %}
-                                    {{ extrato.banco }}
-                                </small>
-                                <small style="font-size: 0.75rem;">{{ extrato.data_transacao|date:"d/m/y" }}</small>
-                            </div>
-                            
-                            <h6 class="mb-1 mt-1">R$ {{ extrato.saldo_restante|floatformat:2|intcomma }}</h6>
-                            {% if extrato.is_parcial and extrato.status == 'PENDENTE' %}
-                                <span class="badge bg-warning text-dark mb-1" style="font-size: 0.65rem;">Uso Parcial</span>
-                            {% endif %}
+                            <div class="list-group-item list-group-item-action d-flex align-items-center gap-2 extrato-item
+                                {% if extrato.cor_automacao == 'VERDE' %}bg-soft-success
+                                {% elif extrato.cor_automacao == 'AMARELO' %}bg-soft-warning
+                                {% elif extrato.cor_automacao == 'VERMELHO' %}bg-soft-danger{% endif %}"
+                                data-cnpj="{{ extrato.cnpj_cpf|default:'' }}" 
+                                data-valor="{{ extrato.saldo_restante|stringformat:'f' }}">
+                                
+                                <input class="form-check-input chk-extrato shadow-sm flex-shrink-0 me-2" type="checkbox" form="form-multiplas-notas" name="extratos_selecionados" value="{{ extrato.id }}" style="transform: scale(1.3); cursor: pointer;"
+                                {% if extrato_selecionado and extrato_selecionado.id == extrato.id %}checked{% endif %}>
 
-                            <small class="d-block text-truncate {% if extrato_selecionado and extrato_selecionado.id == extrato.id %}text-white-50{% else %}text-muted{% endif %}" style="max-width: 100%;">
-                                {{ extrato.descricao }}
-                            </small>
-                            <small class="{% if extrato_selecionado and extrato_selecionado.id == extrato.id %}text-white-50{% else %}text-muted{% endif %}">
-                                <strong>CNPJ:</strong> {{ extrato.cnpj_cpf|default:"Não identificado" }}
-                            </small>
-                        </a>
+                                <a href="?extrato_id={{ extrato.id }}{% if filtro_banco %}&filtro_banco={{ filtro_banco }}{% endif %}{% if filtro_empresa %}&filtro_empresa={{ filtro_empresa }}{% endif %}{% if filtro_data %}&filtro_data={{ filtro_data }}{% endif %}" 
+                                    class="text-decoration-none flex-grow-1 text-dark">
+                                        
+                                        <div class="d-flex w-100 justify-content-between align-items-center">
+                                            <small class="fw-bold">
+                                                {% if extrato.status == 'CONCILIADO' %}
+                                                    <i class="bi bi-check-circle-fill text-success me-1" title="Já Conciliado"></i>
+                                                {% endif %}
+                                                {{ extrato.banco }}
+                                            </small>
+                                            <small style="font-size: 0.75rem;">{{ extrato.data_transacao|date:"d/m/y" }}</small>
+                                        </div>
+                                        
+                                        <h6 class="mb-1 mt-1">R$ {{ extrato.saldo_restante|floatformat:2|intcomma }}</h6>
+                                        {% if extrato.is_parcial and extrato.status == 'PENDENTE' %}
+                                            <span class="badge bg-warning text-dark mb-1" style="font-size: 0.65rem;">Uso Parcial</span>
+                                        {% endif %}
+
+                                        <small class="d-block text-truncate text-muted" style="max-width: 100%;">
+                                            {{ extrato.descricao }}
+                                        </small>
+                                        <small class="text-muted">
+                                            <strong>CNPJ:</strong> {{ extrato.cnpj_cpf|default:"Não identificado" }}
+                                        </small>
+                                    </a>
+                                </div>
                         {% empty %}
                         <div class="p-4 text-center text-muted">
                             <i class="bi bi-check-circle display-4"></i>
@@ -92,17 +113,20 @@
                 </div>
             </div>
         </div>
-
         <div class="col-md-9" id="area-tabela" style="transition: all 0.3s ease;">
-            
             <div class="mb-2 text-start">
                 <button id="btn-toggle-menu" class="btn btn-sm btn-outline-secondary bg-white border-0 shadow-sm fw-bold px-3">
                     <i class="bi bi-arrows-expand" id="icone-btn-menu"></i> <span id="texto-btn-menu">Ocultar Menu Lateral</span>
                 </button>
             </div>
-
+            <div id="painel-resumo-multiplos" class="alert alert-info d-none shadow-sm mb-3 d-flex justify-content-between align-items-center border-info">
+                <div>
+                    <i class="bi bi-calculator"></i> <strong class="text-info-emphasis">Total dos Depósitos Selecionados:</strong> 
+                    <span class="fs-4 fw-bold text-dark ms-2" id="total-depositos-selecionados">R$ 0,00</span>
+                </div>
+                <span class="badge bg-info text-dark" id="qtd-depositos-selecionados">0 depósitos</span>
+            </div>
             {% if extrato_selecionado %}
-                
                 <div class="card shadow border-0 mb-3">
                     <div class="card-body bg-light">
                         <div class="row align-items-center">
@@ -116,11 +140,16 @@
                             <div class="col-md-5">
                                 <form method="POST" action="{% url 'painel_conciliacao' %}?extrato_id={{ extrato_selecionado.id }}" class="m-0 mb-2">
                                     {% csrf_token %}
-                                    <input type="hidden" name="acao" value="vincular_cnpj">
                                     <div class="input-group input-group-sm shadow-sm">
                                         <span class="input-group-text bg-primary text-white border-primary"><i class="bi bi-link-45deg"></i></span>
                                         <input type="text" name="cnpj" class="form-control border-primary" placeholder="Digite o CNPJ..." value="{{ extrato_selecionado.cnpj_cpf|default:'' }}" required>
-                                        <button type="submit" class="btn btn-primary">Buscar Notas</button>
+                                        <div class="hstack gap-3">
+                                            <button type="submit" name="acao" value="vincular_cnpj" class="btn btn-primary">Buscar</button>
+                                            
+                                            <button type="button" class="btn btn-success fw-bold" onclick="abrirModalRevisaoVerdes('{{ extrato_selecionado.id }}')" title="Revisar e conciliar todos os verdes deste CNPJ">
+                                                    <i class="bi bi-check-all"></i> Efetivar Verdes
+                                            </button>
+                                        </div>
                                     </div>
                                 </form>
 
@@ -139,6 +168,11 @@
                                 <button type="button" class="btn btn-info btn-sm shadow-sm mt-2 w-100 fw-bold text-white" data-bs-toggle="modal" data-bs-target="#modalEmailCliente">
                                     <i class="bi bi-envelope-at"></i> Solicitar Composição (E-mail)
                                 </button>
+                                {% if extrato_selecionado.cnpj_cpf %}
+                                <button type="button" id="btn-agrupar-cnpj-principal" class="btn btn-outline-info btn-sm shadow-sm mt-2 w-100 fw-bold" data-cnpj="{{ extrato_selecionado.cnpj_cpf }}">
+                                    <i class="bi bi-funnel"></i> Agrupar Depósitos (Mesmo CNPJ)
+                                </button>
+                                {% endif %}
                             </div>
                         </div>
 
@@ -261,15 +295,22 @@
                             
                             <div class="table-responsive">
                                 <table class="table table-hover table-sm align-middle mb-0" style="font-size: 0.85rem;">
-                                    <thead class="table-light">
+                                   <thead class="table-light">
                                         <tr>
-                                            <th class="text-center">Estab.</th>
-                                            <th class="text-center">Espécie</th>
-                                            <th class="text-center">Série</th>
-                                            <th>Título/Parc.</th>
-                                            <th>Vencimento</th>
-                                            <th class="text-end">Vl. Bruto</th>
-                                            <th class="text-end">Vl. Conciliado</th>
+                                            <th class="text-center sortable user-select-none px-1" data-sort="string" style="width: 40px; cursor: pointer; font-size: 0.8rem;">Estab. <i class="bi bi-arrow-down-up small text-muted"></i></th>
+                                            <th class="text-center sortable user-select-none" data-sort="string" style="width: 60px; cursor: pointer;">Espécie <i class="bi bi-arrow-down-up small text-muted"></i></th>
+                                            <th class="text-center sortable user-select-none" data-sort="string" style="width: 60px; cursor: pointer;">Série <i class="bi bi-arrow-down-up small text-muted"></i></th>
+                                            <th class="sortable user-select-none" data-sort="string" style="cursor: pointer;">Título <i class="bi bi-arrow-down-up small text-muted"></i></th>
+                                            <th class="text-center sortable user-select-none" data-sort="string" style="width: 60px; cursor: pointer;">Parc. <i class="bi bi-arrow-down-up small text-muted"></i></th>
+                                            <th class="sortable user-select-none" data-sort="date" style="cursor: pointer;">Emissão <i class="bi bi-arrow-down-up small text-muted"></i></th>
+                                            <th class="sortable user-select-none" data-sort="date" style="cursor: pointer;">Vencimento <i class="bi bi-arrow-down-up small text-muted"></i></th>
+                                            <th class="text-end sortable user-select-none" data-sort="currency" style="cursor: pointer;">Vl. Bruto <i class="bi bi-arrow-down-up small text-muted"></i></th>
+                                            
+                                            <th class="text-end sortable user-select-none col-compo d-none" data-sort="currency" style="cursor: pointer;">Vl. Inf. Excel <i class="bi bi-arrow-down-up small text-muted"></i></th>
+                                            <th class="text-end sortable user-select-none col-compo d-none" data-sort="currency" style="cursor: pointer;">Diferença <i class="bi bi-arrow-down-up small text-muted"></i></th>
+                                            
+                                            <th class="text-end sortable user-select-none" data-sort="currency" style="cursor: pointer;">Saldo Real <i class="bi bi-arrow-down-up small text-muted"></i></th>
+                                            <th class="text-center" style="width: 40px;"><i class="bi bi-check-all text-primary"></i></th>
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -301,7 +342,7 @@
                                 <div class="table-responsive" style="max-height: 50vh; overflow-y: auto;">
                                     <table class="table table-hover table-striped align-middle mb-0" style="font-size: 0.85rem;" id="tabela-notas">
                                         
-                                        <thead class="table-light sticky-top">
+                                        <thead class="table-light">
                                             <tr>
                                                 <th class="text-center sortable user-select-none px-1" data-sort="string" style="width: 40px; cursor: pointer; font-size: 0.8rem;">Estab. <i class="bi bi-arrow-down-up small text-muted"></i></th>
                                                 <th class="text-center sortable user-select-none" data-sort="string" style="width: 60px; cursor: pointer;">Espécie <i class="bi bi-arrow-down-up small text-muted"></i></th>
@@ -312,7 +353,7 @@
                                                 <th class="sortable user-select-none" data-sort="date" style="cursor: pointer;">Vencimento <i class="bi bi-arrow-down-up small text-muted"></i></th>
                                                 <th class="text-end sortable user-select-none" data-sort="currency" style="cursor: pointer;">Vl. Bruto <i class="bi bi-arrow-down-up small text-muted"></i></th>
                                                 
-                                                <th class="text-end sortable user-select-none col-compo d-none" data-sort="currency" style="cursor: pointer;">Vl. Inf. Excel <i class="bi bi-arrow-down-up small text-muted"></i></th>
+                                                <th class="text-end sortable user-select-none col-compo d-none" data-sort="currency" style="cursor: pointer;">Vl. Inf. Cliente <i class="bi bi-arrow-down-up small text-muted"></i></th>
                                                 <th class="text-end sortable user-select-none col-compo d-none" data-sort="currency" style="cursor: pointer;">Diferença <i class="bi bi-arrow-down-up small text-muted"></i></th>
                                                 
                                                 <th class="text-end sortable user-select-none" data-sort="currency" style="cursor: pointer;">Saldo Real <i class="bi bi-arrow-down-up small text-muted"></i></th>
@@ -321,7 +362,7 @@
                                         </thead>
                                         <tbody>
                                             {% for nota in notas_sugeridas %}
-                                                <tr class="linha-nota {% if nota.match_exato %}table-success border-success{% endif %}" id="tr-nota-{{ nota.id|stringformat:'d' }}">
+                                                <tr class="linha-nota {% if nota.match_exato %}table-success border-success{% elif nota.match_provavel %}table-warning border-warning{% endif %}" id="tr-nota-{{ nota.id|stringformat:'d' }}">
                                                     <td class="text-center px-1" style="width: 40px; font-size: 0.8rem;">{{ nota.estabelecimento|default:"-" }}</td>
                                                     <td class="text-center">{{ nota.especie|default:"-" }}</td>
                                                     <td class="text-center">{{ nota.serie|default:"-" }}</td>
@@ -335,6 +376,7 @@
                                                     <td class="text-end fw-bold col-compo d-none td-diferenca">-</td>
 
                                                     <td class="text-end fw-bold td-saldo-real {% if nota.match_exato %}text-success{% endif %}">
+                                                     
                                                         R$ {{ nota.saldo_real_calculado|floatformat:2|intcomma }}
                                                         {% if nota.match_exato %}
                                                             <br><span class="badge bg-success" style="font-size: 0.7rem;">Match!</span>
@@ -453,6 +495,7 @@
         
     </div>
 </div>
+
 <div class="modal fade" id="modalCalculadora" tabindex="-1" aria-labelledby="modalCalculadoraLabel" aria-hidden="true">
     <div class="modal-dialog modal-sm modal-dialog-centered">
         <div class="modal-content border-0 shadow">
@@ -490,6 +533,7 @@
         </div>
     </div>
 </div>
+
 <div class="modal fade" id="modalEmailCliente" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog">
         <div class="modal-content border-0 shadow">
@@ -523,8 +567,109 @@
 {% else %}
     <input type="hidden" id="nomeClienteEmail" value="">
 {% endif %}
+<div class="modal fade" id="modalRevisaoVerdes" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title fw-bold"><i class="bi bi-check-all"></i> Revisão de Baixa em Lote</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body bg-light">
+                
+                <div id="loading-revisao" class="text-center py-3">
+                    <div class="spinner-border text-success" role="status"></div>
+                    <p class="mt-2 text-muted">Somando valores, aguarde...</p>
+                </div>
+                
+                <div id="conteudo-revisao" class="d-none">
+                    <p class="text-muted small">Confira os totais antes de efetivar a conciliação automática para esta Raiz de CNPJ:</p>
+                    
+                    <ul class="list-group mb-3 shadow-sm">
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            Qtd. de Depósitos Verdes
+                            <span class="badge bg-primary rounded-pill fs-6" id="rev-qtd">0</span>
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between align-items-center bg-light">
+                            <strong>1. Soma dos Depósitos</strong>
+                            <strong class="text-primary fs-5" id="rev-soma-dep">R$ 0,00</strong>
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between align-items-center bg-light">
+                            <strong>2. Soma das Notas Sugeridas</strong>
+                            <strong class="text-success fs-5" id="rev-soma-notas">R$ 0,00</strong>
+                        </li>
+                    </ul>
+                    
+                    <div id="alerta-divergencia" class="alert alert-danger d-none small">
+                        <i class="bi bi-exclamation-triangle-fill"></i> <strong>Atenção!</strong> Os valores não batem. É provável que o robô tenha sugerido a mesma nota para depósitos diferentes ou falte algum centavo. <br><strong>Ação bloqueada. Concilie estes manualmente.</strong>
+                    </div>
+                </div>
+
+            </div>
+            <div class="modal-footer">
+                
+                    <input type="hidden" name="acao" value="efetivar_verdes_cnpj">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="button" class="btn btn-success fw-bold" id="btn-confirmar-verdes" disabled onclick="forcarEfetivacaoLote()">
+                        <i class="bi bi-check-circle"></i> Confirmar Baixa em Lote
+                    </button>
+                
+            </div>
+        </div>
+    </div>
+    
+</div>
+<div class="modal fade" id="modalRevisaoVerdes" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title fw-bold"><i class="bi bi-check-all"></i> Revisão de Baixa em Lote</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body bg-light">
+                
+                <div id="loading-revisao" class="text-center py-3">
+                    <div class="spinner-border text-success" role="status"></div>
+                    <p class="mt-2 text-muted">Somando valores no banco de dados, aguarde...</p>
+                </div>
+                
+                <div id="conteudo-revisao" class="d-none">
+                    <p class="text-muted small">Confira os totais antes de efetivar a conciliação automática para este CNPJ:</p>
+                    <ul class="list-group mb-3 shadow-sm">
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            Qtd. de Depósitos Verdes
+                            <span class="badge bg-primary rounded-pill fs-6" id="rev-qtd">0</span>
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between align-items-center bg-light">
+                            <strong>Soma dos Depósitos</strong>
+                            <strong class="text-primary fs-5" id="rev-soma-dep">R$ 0,00</strong>
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between align-items-center bg-light">
+                            <strong>Soma das Notas Sugeridas</strong>
+                            <strong class="text-success fs-5" id="rev-soma-notas">R$ 0,00</strong>
+                        </li>
+                    </ul>
+                    
+                    <div id="alerta-divergencia" class="alert alert-danger d-none small">
+                        <i class="bi bi-exclamation-triangle-fill"></i> <strong>Atenção!</strong> Os valores não batem. É provável que o cliente pagou com desconto, juros ou há múltiplas notas. <br><strong>Ação bloqueada. Concilie estes extratos manualmente.</strong>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <form method="POST" action="{% url 'painel_conciliacao' %}?extrato_id={{ extrato_selecionado.id }}">
+                    {% csrf_token %}
+                    <input type="hidden" name="acao" value="efetivar_verdes_cnpj">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-success fw-bold" id="btn-confirmar-verdes" disabled>
+                        Confirmar Baixa em Lote
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
 <script type="application/json" id="dadosEstabsJson">{{ dados_estabelecimentos|safe }}</script>
 
 <script src="{% static 'js/painel_conciliacao.js' %}"></script>
 <script src="{% static 'js/menulateral.js' %}"></script>
+<script src="{% static 'js/modal_efetivar_verde.js' %}"></script>
 {% endblock %}

@@ -1,7 +1,7 @@
 from django.contrib import admin
 from import_export import resources
 from import_export.admin import ImportExportModelAdmin
-from .models import MapeamentoDePara, ExtratoBancario, ExcecaoConciliacao, EstabelecimentoCNPJ, ClienteEmail, ConciliacaoNota
+from .models import MapeamentoDePara, ExtratoBancario, ExcecaoConciliacao, EstabelecimentoCNPJ, ClienteEmail, ConciliacaoNota, SugestaoAutomacao
 from analise.models import ContasReceber
 
 # =========================================================
@@ -31,9 +31,9 @@ class MapeamentoDeParaAdmin(admin.ModelAdmin):
 
 @admin.register(ExtratoBancario)
 class ExtratoBancarioAdmin(admin.ModelAdmin):
-    list_display = ('empresa', 'banco', 'conta_corrente', 'data_transacao', 'valor', 'status', 'cnpj_cpf')
-    list_filter = ('empresa', 'banco', 'conta_corrente', 'status', 'data_transacao')
-    search_fields = ('descricao', 'documento', 'cnpj_cpf', 'razao_social')
+    list_display = ('empresa', 'banco', 'conta_corrente', 'data_transacao', 'valor','cor_automacao', 'status', 'cnpj_cpf')
+    list_filter = ('empresa', 'banco', 'conta_corrente', 'status','cor_automacao', 'data_transacao')
+    search_fields = ('descricao', 'documento', 'cnpj_cpf', 'razao_social', 'conta_corrente')
     date_hierarchy = 'data_transacao'
     readonly_fields = ('data_importacao',)
 
@@ -43,6 +43,8 @@ class ContasReceberAdmin(admin.ModelAdmin):
     search_fields = ('titulo', 'nome_abrev', 'cnpj', 'nosso_numero')
     list_filter = ('status', 'empresa', 'carteira')
     ordering = ('-dt_vencto_atual',)
+
+    
 
 @admin.register(ExcecaoConciliacao)
 class ExcecaoConciliacaoAdmin(admin.ModelAdmin):
@@ -61,4 +63,10 @@ class ConciliacaoNotaAdmin(admin.ModelAdmin):
     search_fields = ('extrato__descricao', 'nota__titulo')
     
     # Adicionando o filtro lateral pelo status da nota
-    list_filter = ('nota__status',)
+    list_filter = ('nota__status', 'extrato__data_importacao', 'extrato__data_transacao')
+    search_fields = ('nota__titulo', 'extrato__descricao')
+
+@admin.register(SugestaoAutomacao)
+class SugestaoAutomacaoAdmin(admin.ModelAdmin):
+    list_display = ('id', 'extrato', 'nota', 'valor_sugerido')
+    search_fields = ('extrato__descricao', 'nota__titulo')

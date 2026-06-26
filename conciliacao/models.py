@@ -63,14 +63,38 @@ class ExtratoBancario(models.Model):
     status = models.CharField(max_length=30, choices=STATUS, default='PENDENTE')
     data_importacao = models.DateTimeField(auto_now_add=True)
 
+    # =======================================================
+    # NOVO CAMPO: Guarda a cor da automação do assistente RPA
+    # =======================================================
+    cor_automacao = models.CharField(max_length=20, null=True, blank=True, verbose_name="Cor da Automação")
+
     class Meta:
         verbose_name = "Extrato Bancário"
         verbose_name_plural = "Extratos Bancários"
         # Agora a trava de duplicidade inclui a Empresa e a Conta!
         unique_together = ('empresa', 'banco', 'conta_corrente', 'data_transacao', 'descricao', 'documento', 'valor', 'saldo_conta')
-
+    
     def __str__(self):
         return f"{self.get_empresa_display()} | {self.banco} C/C: {self.conta_corrente} | {self.data_transacao.strftime('%d/%m/%Y')} | R$ {self.valor}"
+
+
+# ==========================================
+# NOVA TABELA: RASCUNHO DA AUTOMAÇÃO
+# ==========================================
+class SugestaoAutomacao(models.Model):
+    extrato = models.ForeignKey(ExtratoBancario, on_delete=models.CASCADE, related_name='sugestoes_automacao')
+    
+    # Adicionamos o prefixo 'analise.' antes do nome da tabela!
+    nota = models.ForeignKey('analise.ContasReceber', on_delete=models.CASCADE) 
+    
+    valor_sugerido = models.DecimalField(max_digits=15, decimal_places=2)
+
+    class Meta:
+        verbose_name = "Sugestão de Automação"
+        verbose_name_plural = "Sugestões de Automação"
+
+    def __str__(self):
+        return f"Extrato: {self.extrato.id} -> Nota: {self.nota.id} | R$ {self.valor_sugerido}"
     
 # ==========================================
 # 3. TABELA PONTE DE CONCILIAÇÃO

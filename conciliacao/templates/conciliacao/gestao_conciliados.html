@@ -1,7 +1,6 @@
 {% extends 'base.html' %}
 {% load static %}
 {% load humanize %}
-
 {% block content %}
 <div class="container-fluid mt-4 px-4">
     <div class="d-flex justify-content-between align-items-center mb-2">
@@ -15,77 +14,79 @@
             </a>
         </div>
     </div>
-
     <div class="card shadow-sm border-0 mb-5">
-        <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center py-3">
+        <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center py-3">
             <h5 class="mb-0"><i class="bi bi-list-check"></i> Notas Prontas para Exportação (Lote)</h5>
-            
             <a href="{% url 'exportar_lote_datasul' %}" class="btn btn-success fw-bold shadow-sm">
                 <i class="bi bi-file-earmark-excel"></i> Gerar Lote Datasul (.xlsx)
             </a>
+            <button type="submit" form="form-desconciliar" class="btn btn-warning text-white me-2 shadow-sm" id="btn-desconciliar" disabled onclick="return confirm('Deseja realmente desfazer a conciliação das notas selecionadas?');">
+                        <i class="bi bi-arrow-counterclockwise"></i> Desfazer Selecionadas
+            </button>
         </div>
-        <div class="card-body p-0">
-            <div class="table-responsive" style="max-height: 50vh; overflow-y: auto;">
-                <table class="table table-hover align-middle mb-0" style="font-size: 0.85rem;">
-                    <thead class="table-light sticky-top">
-                        <tr>
-                            <th class="text-center">Estab.</th>
-                            <th class="text-center">Espécie</th>
-                            <th class="text-center">Série</th>
-                            <th>Título/Parc.</th>
-                            <th class="text-center">Empresa</th>
-                            <th>Cliente</th>
-                            <th class="text-end">Vl. Bruto</th>
-                            <th class="text-end">Vl. Líquido (Baixa)</th>
-                            <th class="text-center">Ações</th> </tr>
-                    </thead>
-                    <tbody>
-                        {% for item in tabela_dados %}
-                            <tr class="table-secondary">
-                                <td colspan="7" class="text-start">
-                                    <i class="bi bi-bank"></i> <strong>Extrato:</strong> {{ item.extrato.banco }} | {{ item.extrato.data_transacao|date:"d/m/Y" }} | {{ item.extrato.descricao }}
-                                </td>
-                                <td colspan="2" class="text-end fw-bold">
-                                    Total Depósito: R$ {{ item.extrato.valor|floatformat:2|intcomma }}
-                                </td>
-                            </tr>
-                            
-                            {% for rel in item.relacoes %}
+         
+        <form method="POST" action="{% url 'gestao_conciliados' %}" id="form-desconciliar">
+            {% csrf_token %}
+            <input type="hidden" name="acao" value="desconciliar_selecionadas">
+            <div class="card border-0 shadow-sm">
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="table-light text-secondary" style="font-size: 0.85rem;">
                             <tr>
-                                <td class="text-center">{{ rel.nota.estabelecimento|default:"-" }}</td>
-                                <td class="text-center">{{ rel.nota.especie|default:"-" }}</td>
-                                <td class="text-center">{{ rel.nota.serie|default:"-" }}</td>
-                                <td><strong>{{ rel.nota.titulo }}</strong> / {{ rel.nota.parcela }}</td>
-                                <td class="text-center">{{ rel.nota.empresa|default:"-" }}</td>
-                                <td>{{ rel.nota.nome_abrev }}</td>
-                                <td class="text-end text-muted">R$ {{ rel.nota.vl_bruto|floatformat:2|intcomma }}</td>
-                                <td class="text-end fw-bold text-success">R$ {{ rel.nota.vl_liquido|floatformat:2|intcomma }}</td>
-                                
-                                <td class="text-center">
-                                    <form method="POST" action="{% url 'gestao_conciliados' %}" class="d-inline" onsubmit="return confirm('Tem certeza que deseja desconciliar a nota {{ rel.nota.titulo }}? Ela voltará para o Painel.');">
-                                        {% csrf_token %}
-                                        <input type="hidden" name="acao" value="desconciliar_nota">
-                                        <input type="hidden" name="relacao_id" value="{{ rel.id }}">
-                                        <button type="submit" class="btn btn-sm btn-outline-danger shadow-sm" title="Desfazer Conciliação">
-                                            <i class="bi bi-arrow-counterclockwise"></i>
-                                        </button>
-                                    </form>
-                                </td>
+                                <th scope="col">Estab.</th>
+                                <th scope="col">Espécie</th>
+                                <th scope="col">Série</th>
+                                <th scope="col">Título/Parc.</th>
+                                <th scope="col">Empresa</th>
+                                <th scope="col">Cliente</th>
+                                <th scope="col">Vl. Bruto</th>
+                                <th scope="col">Vl. Líquido (Baixa)</th>
+                                <th scope="col" style="width: 40px;" class="text-center">
+                                    <input class="form-check-input" type="checkbox" id="checkAll">
+                                </th>
                             </tr>
+                        </thead>
+                        <tbody>
+                            {% for linha in tabela_dados %}
+                                <tr class="table-secondary">
+                                    <td colspan="8" class="fw-bold text-dark" style="font-size: 0.85rem;">
+                                        <i class="bi bi-bank me-1"></i> Extrato: {{ linha.extrato.banco }} | {{ linha.extrato.data_transacao|date:"d/m/y" }} | {{ linha.extrato.descricao }}
+                                    </td>
+                                    <td class="fw-bold text-end text-dark" style="font-size: 0.85rem;">
+                                        Total Depósito: R$ {{ linha.extrato.valor }}
+                                    </td>
+                                </tr>
+                                
+                                {% for rel in linha.relacoes %}
+                                <tr>
+                                    <td>{{ rel.nota.estabelecimento }}</td>
+                                    <td>{{ rel.nota.especie }}</td>
+                                    <td>{{ rel.nota.serie }}</td>
+                                    <td class="fw-bold">{{ rel.nota.titulo }} / {{ rel.nota.parcela }}</td>
+                                    <td>{{ rel.nota.empresa }}</td>
+                                    <td class="text-truncate" style="max-width: 150px;" title="{{ rel.nota.nome_cliente }}">{{ rel.nota.nome_cliente }}</td>
+                                    <td class="text-muted">R$ {{ rel.nota.vl_bruto }}</td>
+                                    <td class="text-success fw-bold">R$ {{ rel.valor_pago }}</td>
+                                    <td class="text-center">
+                                        <input class="form-check-input check-item border-secondary" type="checkbox" name="relacoes_selecionadas" value="{{ rel.id }}">
+                                    </td>
+                                </tr>
+                                {% endfor %}
                             {% endfor %}
                             
-                        {% empty %}
+                            {% if not tabela_dados %}
                             <tr>
-                                <td colspan="9" class="text-center py-5 text-muted">
-                                    <i class="bi bi-inbox display-4 d-block mb-3"></i>
-                                    Nenhuma nota aguardando exportação neste momento.
+                                <td colspan="9" class="text-center py-4 text-muted">
+                                    Nenhuma nota conciliada pronta para exportação.
                                 </td>
                             </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
+                            {% endif %}
+                        </tbody>
+                    </table>
+                </div>
             </div>
-        </div>
+        </form>
     </div>
 </div>
+<script src="{% static 'js/gestao_conciliados.js' %}"></script>
 {% endblock %}

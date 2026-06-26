@@ -1,0 +1,38 @@
+/* ========================================================
+   Cores Suaves para o Assistente de Pré-Conciliação (Itaú)
+   ======================================================== */
+.bg-soft-success { 
+    background-color: #d1e7dd !important; 
+    border-left: 4px solid #0f5132 !important; 
+}
+
+.bg-soft-warning { 
+    background-color: #fff3cd !important; 
+    border-left: 4px solid #856404 !important; 
+}
+
+.bg-soft-danger { 
+    background-color: #f8d7da !important; 
+    border-left: 4px solid #842029 !important; 
+}
+/* ========================================================
+   CORREÇÃO DO CABEÇALHO CONGELADO (TABELA DE NOTAS)
+======================================================== */
+#tabela-notas {
+    border-collapse: separate !important;
+    border-spacing: 0;
+}
+
+#tabela-notas thead th {
+    position: sticky;
+    top: 0;
+    background-color: #084298 !important; /* Fundo cinza claro */
+    color: #ffffff !important; /* Força o texto a ficar escuro e visível */
+    z-index: 10; 
+    white-space: nowrap !important; /* Impede o esmagamento das colunas */
+    box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+}
+
+#tabela-notas tbody td {
+    white-space: nowrap;
+}

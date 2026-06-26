@@ -11,12 +11,13 @@
     
     <link rel="stylesheet" href="{% static 'css/global.css' %}">
     <link rel="stylesheet" href="{% static 'analise/style.css' %}?v=1.1">
+    <link rel="stylesheet" href="{% static 'css/painel.css' %}">
     {% block extra_css %}{% endblock %}
 </head>
 <body class="d-flex flex-column min-vh-100">
 
     <nav class="navbar navbar-expand-lg navbar-dark mb-4" style="background-color: #212529;">
-        <div class="container">
+        <div class="container-fluid px-4">
             <a class="navbar-brand fw-bold" href="{% url 'dashboard_resumo' %}">
                 <img src="{% static 'images/logo-protege.png' %}" alt="Logo" class="logo-navbar">
                 <span>PROTEGE</span>
@@ -113,7 +114,7 @@
         </div>
     </nav>
     
-    <div class="container">
+    <div class="container-fluid px-4 mt-4">
         {% if messages %}
             {% for message in messages %}
                 <div class="alert alert-{{ message.tags }} alert-dismissible fade show shadow-sm" role="alert">
@@ -124,7 +125,7 @@
         {% endif %}
     </div>
 
-    <main class="container">
+    <main class="ccontainer-fluid px-4 mt-4">
         {% block content %}{% endblock %}
     </main>
 

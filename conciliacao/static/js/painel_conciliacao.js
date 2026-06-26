@@ -31,30 +31,47 @@ document.addEventListener('DOMContentLoaded', function() {
         // 2. ATUALIZAR SOMA E SEMÁFORO
         // ==========================================
         function atualizarSoma(triggerCb = null) {
-            let soma = 0;
+            let somaNotas = 0;
             let checkedCount = 0;
             let firstChecked = null;
 
+            // 1. Descobre o Valor Alvo dinâmico (Soma dos depósitos marcados)
+            let valorAlvoDepositos = 0;
+            const chkExtratos = document.querySelectorAll('.chk-extrato:checked');
+            
+            if (chkExtratos.length > 0) {
+                chkExtratos.forEach(chk => {
+                    const item = chk.closest('.extrato-item');
+                    valorAlvoDepositos += parseFloat(item.getAttribute('data-valor').replace(',', '.')) || 0;
+                });
+            } else if (valorDepositoEl) {
+                // Fallback de segurança se ninguém estiver marcado
+                valorAlvoDepositos = parseFloat(valorDepositoEl.getAttribute('data-valor')) || 0;
+            }
+
+            // 2. Descobre o Valor das Notas
             document.querySelectorAll('.nota-checkbox').forEach(cb => {
                 if (cb.checked) {
-                    soma += parseFloat(cb.getAttribute('data-valor'));
+                    somaNotas += parseFloat(cb.getAttribute('data-valor'));
                     checkedCount++;
                     if (!firstChecked) firstChecked = cb;
                 }
             });
 
-            const diferenca = soma - valorDeposito;
-            let textoSoma = 'Soma: ' + soma.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+            // 3. Compara Notas vs Depósitos
+            const diferenca = somaNotas - valorAlvoDepositos;
+            let textoSoma = 'Soma Notas: ' + somaNotas.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
             if (checkedCount > 0 && Math.abs(diferenca) > 0.009) {
                 textoSoma += ' | Dif: ' + diferenca.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
             }
 
+            // 4. Pinta o Semáforo
             if (somaDisplay) {
                 somaDisplay.innerText = textoSoma;
-                if (Math.abs(diferenca) < 0.01) {
+                if (Math.abs(diferenca) < 0.01 && checkedCount > 0) {
                     somaDisplay.className = 'mb-0 px-3 py-1 rounded shadow-sm bg-success text-white';
-                } else if (soma > valorDeposito) {
+                } else if (somaNotas > valorAlvoDepositos) {
                     somaDisplay.className = 'mb-0 px-3 py-1 rounded shadow-sm bg-danger text-white';
                 } else {
                     somaDisplay.className = 'mb-0 px-3 py-1 rounded shadow-sm bg-dark text-white';
@@ -65,6 +82,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 btnConciliar.disabled = (checkedCount === 0);
             }
 
+            // Resto da lógica original do painel de impostos
             if (checkedCount === 0) {
                 if(painelImpostos) painelImpostos.style.display = 'none';
                 document.querySelectorAll('.linha-nota').forEach(tr => tr.classList.remove('table-warning'));
@@ -87,6 +105,10 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             }
         }
+        
+        // Expõe a função para o arquivo inteiro poder usá-la
+        window.forcarRecalculoDasNotas = atualizarSoma;
+        
 
         // ==========================================
         // 3. PAINEL DE IMPOSTOS
@@ -664,6 +686,138 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             } catch(e) { }
         });
+/* ========================================================
+   MODAL DE REVISÃO DOS DEPÓSITOS VERDES (EM LOTE)
+======================================================== */
+        function abrirModalRevisaoVerdes(extratoId) {
+            // 1. Abre a janela e reseta o visual
+            var modalElement = document.getElementById('modalRevisaoVerdes');
+            if (!modalElement) return; // Trava de segurança
+            
+            var modal = new bootstrap.Modal(modalElement);
+            modal.show();
+            
+            document.getElementById('loading-revisao').classList.remove('d-none');
+            document.getElementById('conteudo-revisao').classList.add('d-none');
+            document.getElementById('btn-confirmar-verdes').disabled = true;
+            document.getElementById('alerta-divergencia').classList.add('d-none');
+
+            // Captura o token de segurança do Django direto de qualquer form da tela
+            var csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
+
+            // 2. Chama o backend (views.py) via AJAX para somar tudo
+            fetch(window.location.pathname, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'X-CSRFToken': csrfToken
+                },
+                body: JSON.stringify({
+                    'acao': 'resumo_verdes_cnpj',
+                    'extrato_id': extratoId
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                // Esconde o "Carregando..." e mostra o resultado
+                document.getElementById('loading-revisao').classList.add('d-none');
+                document.getElementById('conteudo-revisao').classList.remove('d-none');
+                
+                if(data.status === 'sucesso') {
+                    // Preenche os valores na tela
+                    document.getElementById('rev-qtd').textContent = data.qtd_depositos;
+                    document.getElementById('rev-soma-dep').textContent = 'R$ ' + parseFloat(data.total_depositos).toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+                    document.getElementById('rev-soma-notas').textContent = 'R$ ' + parseFloat(data.total_notas).toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+                    
+                    // 3. Trava de segurança: Diferença máxima tolerada de 0.05
+                    if (Math.abs(data.total_depositos - data.total_notas) <= 0.05) {
+                        document.getElementById('btn-confirmar-verdes').disabled = false; // Libera o botão
+                    } else {
+                        document.getElementById('alerta-divergencia').classList.remove('d-none'); // Exibe o alerta vermelho
+                    }
+                } else {
+                    alert('Erro ao buscar dados: ' + data.message);
+                    modal.hide();
+                }
+            })
+            .catch(error => {
+                alert('Erro de conexão ao calcular os totais.');
+                console.error(error);
+                modal.hide();
+            });
+        }
     }
-    
+
 }); // <-- Fim do ÚNICO DOMContentLoaded
+
+document.addEventListener('DOMContentLoaded', function() {
+    const chkExtratos = document.querySelectorAll('.chk-extrato');
+    const botoesAgrupar = document.querySelectorAll('.btn-agrupar-cnpj');
+    const painelResumo = document.getElementById('painel-resumo-multiplos');
+    const displayTotal = document.getElementById('total-depositos-selecionados');
+    const displayQtd = document.getElementById('qtd-depositos-selecionados');
+
+    // 1. Função que soma tudo o que está com o checkbox marcado
+    function atualizarSomaDepositos() {
+        let soma = 0.0;
+        let qtd = 0;
+
+        chkExtratos.forEach(chk => {
+            if (chk.checked) {
+                const item = chk.closest('.extrato-item');
+                // O data-valor no HTML já entrega o valor limpo (ex: 1540.50), garantindo precisão
+                const valor = parseFloat(item.getAttribute('data-valor').replace(',', '.')) || 0;
+                soma += valor;
+                qtd++;
+            }
+        });
+
+        // Mostra ou esconde o painel baseado nas seleções
+        if (qtd > 0) {
+            painelResumo.classList.remove('d-none');
+            displayTotal.textContent = soma.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+            displayQtd.textContent = `${qtd} depósito(s)`;
+        } else {
+            painelResumo.classList.add('d-none');
+        }
+        // NOVO: Avisa o outro script para recalcular a "Diferença" das notas instantaneamente!
+        if (window.forcarRecalculoDasNotas) window.forcarRecalculoDasNotas(null);
+    }
+
+    // 2. Ouvinte para os cliques manuais nos checkboxes
+    chkExtratos.forEach(chk => {
+        chk.addEventListener('change', atualizarSomaDepositos);
+    });
+
+  // 3. O super-poder: Agrupar por CNPJ (Agora no botão principal)
+    const btnAgruparPrincipal = document.getElementById('btn-agrupar-cnpj-principal');
+    
+    if (btnAgruparPrincipal) {
+        btnAgruparPrincipal.addEventListener('click', function(e) {
+            e.preventDefault();
+            
+            // Pega o CNPJ diretamente do data-attribute do botão que criamos
+            const cnpjOrigem = this.getAttribute('data-cnpj');
+            if (!cnpjOrigem) return;
+
+            // Regex que pega apenas números e corta os primeiros 8 dígitos (a Raiz)
+            const raizCnpjOrigem = cnpjOrigem.replace(/\D/g, '').substring(0, 8);
+            if (!raizCnpjOrigem) return;
+
+            // Varre a lista marcando ou desmarcando
+            document.querySelectorAll('.extrato-item').forEach(item => {
+                const cnpjAlvo = (item.getAttribute('data-cnpj') || '').replace(/\D/g, '');
+                const chk = item.querySelector('.chk-extrato');
+                
+                if (chk && cnpjAlvo.substring(0, 8) === raizCnpjOrigem) {
+                    chk.checked = true;
+                } else if (chk) {
+                    chk.checked = false;
+                }
+            });
+
+            atualizarSomaDepositos(); // Recalcula tudo e joga pra tela
+        });
+    }
+});
