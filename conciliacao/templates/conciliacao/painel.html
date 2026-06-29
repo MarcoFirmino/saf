@@ -263,6 +263,37 @@
                     </div>
                 </div>
 
+                {% if relacoes_vinculadas %}
+                <div class="alert alert-warning shadow-sm mb-3 border-warning">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="alert-heading fw-bold mb-1">
+                                <i class="bi bi-pie-chart-fill"></i> Depósito Parcialmente Utilizado
+                            </h6>
+                            <p class="mb-0 small text-dark">Parte do dinheiro deste depósito já foi utilizado para baixar as seguintes notas:</p>
+                        </div>
+                        
+                        <form method="POST" action="{% url 'painel_conciliacao' %}?extrato_id={{ extrato_selecionado.id }}">
+                            {% csrf_token %}
+                            <input type="hidden" name="acao" value="desfazer_conciliacao">
+                            <button type="submit" class="btn btn-danger btn-sm shadow-sm fw-bold" onclick="return confirm('Tem certeza que deseja devolver o dinheiro deste depósito e reabrir as notas abaixo?');">
+                                <i class="bi bi-arrow-counterclockwise"></i> Desfazer Parciais
+                            </button>
+                        </form>
+                    </div>
+                    <hr class="my-2 border-warning">
+                    <ul class="mb-0 small text-dark">
+                        {% for rel in relacoes_vinculadas %}
+                            <li>
+                                <strong>Nota:</strong> {{ rel.nota.titulo }} | 
+                                <strong>Cliente:</strong> 
+                                {% firstof rel.nota.nome_abrev rel.nota.nome_cliente rel.nota.nome_razao_social "Não identificado" %} |
+                                <strong>Valor Abatido:</strong> R$ {{ rel.valor_pago }}
+                            </li>
+                        {% endfor %}
+                    </ul>
+                </div>
+                {% endif %}
                 <div class="card shadow-sm border-0">
                     <div class="card-header bg-secondary text-white d-flex justify-content-between align-items-center">
                         <h6 class="mb-0"><i class="bi bi-receipt"></i> Notas em Aberto Sugeridas</h6>
@@ -567,57 +598,7 @@
 {% else %}
     <input type="hidden" id="nomeClienteEmail" value="">
 {% endif %}
-<div class="modal fade" id="modalRevisaoVerdes" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog">
-        <div class="modal-content border-0 shadow">
-            <div class="modal-header bg-success text-white">
-                <h5 class="modal-title fw-bold"><i class="bi bi-check-all"></i> Revisão de Baixa em Lote</h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body bg-light">
-                
-                <div id="loading-revisao" class="text-center py-3">
-                    <div class="spinner-border text-success" role="status"></div>
-                    <p class="mt-2 text-muted">Somando valores, aguarde...</p>
-                </div>
-                
-                <div id="conteudo-revisao" class="d-none">
-                    <p class="text-muted small">Confira os totais antes de efetivar a conciliação automática para esta Raiz de CNPJ:</p>
-                    
-                    <ul class="list-group mb-3 shadow-sm">
-                        <li class="list-group-item d-flex justify-content-between align-items-center">
-                            Qtd. de Depósitos Verdes
-                            <span class="badge bg-primary rounded-pill fs-6" id="rev-qtd">0</span>
-                        </li>
-                        <li class="list-group-item d-flex justify-content-between align-items-center bg-light">
-                            <strong>1. Soma dos Depósitos</strong>
-                            <strong class="text-primary fs-5" id="rev-soma-dep">R$ 0,00</strong>
-                        </li>
-                        <li class="list-group-item d-flex justify-content-between align-items-center bg-light">
-                            <strong>2. Soma das Notas Sugeridas</strong>
-                            <strong class="text-success fs-5" id="rev-soma-notas">R$ 0,00</strong>
-                        </li>
-                    </ul>
-                    
-                    <div id="alerta-divergencia" class="alert alert-danger d-none small">
-                        <i class="bi bi-exclamation-triangle-fill"></i> <strong>Atenção!</strong> Os valores não batem. É provável que o robô tenha sugerido a mesma nota para depósitos diferentes ou falte algum centavo. <br><strong>Ação bloqueada. Concilie estes manualmente.</strong>
-                    </div>
-                </div>
 
-            </div>
-            <div class="modal-footer">
-                
-                    <input type="hidden" name="acao" value="efetivar_verdes_cnpj">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                    <button type="button" class="btn btn-success fw-bold" id="btn-confirmar-verdes" disabled onclick="forcarEfetivacaoLote()">
-                        <i class="bi bi-check-circle"></i> Confirmar Baixa em Lote
-                    </button>
-                
-            </div>
-        </div>
-    </div>
-    
-</div>
 <div class="modal fade" id="modalRevisaoVerdes" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog">
         <div class="modal-content border-0 shadow">
@@ -659,7 +640,7 @@
                     {% csrf_token %}
                     <input type="hidden" name="acao" value="efetivar_verdes_cnpj">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                    <button type="submit" class="btn btn-success fw-bold" id="btn-confirmar-verdes" disabled>
+                    <button type="submit" class="btn btn-success fw-bold" id="btn-confirmar-verdes" disabled onclick="forcarEfetivacaoLote()">
                         Confirmar Baixa em Lote
                     </button>
                 </form>
@@ -667,6 +648,7 @@
         </div>
     </div>
 </div>
+
 <script type="application/json" id="dadosEstabsJson">{{ dados_estabelecimentos|safe }}</script>
 
 <script src="{% static 'js/painel_conciliacao.js' %}"></script>

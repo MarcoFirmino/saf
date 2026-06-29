@@ -300,7 +300,6 @@ def painel_conciliacao(request):
         if request.headers.get('x-requested-with') == 'XMLHttpRequest' or request.content_type == 'application/json':
             data = json.loads(request.body)
             
-            
             # --- AJAX: CALCULAR RESUMO DE TODOS OS VERDES (GLOBAL) ---
             if data.get('acao') == 'resumo_verdes_cnpj':
                 try:
@@ -462,8 +461,11 @@ def painel_conciliacao(request):
                 return redirect(f"{request.path}?extrato_id={extrato_id}{query_filtros}")
 
             # 2. Busca no banco todos os depósitos e notas envolvidos na transação
-            extratos = ExtratoBancario.objects.filter(id__in=[int(str(eid).replace('.', '')) for eid in extratos_ids]).order_by('data_transacao')
-            notas = ContasReceber.objects.filter(id__in=[int(str(nid).replace('.', '')) for nid in notas_ids]).order_by('dt_vencto_atual')
+            e_ids = [int(str(eid).replace('.', '')) for eid in extratos_ids]
+            n_ids = [int(str(nid).replace('.', '')) for nid in notas_ids]
+            
+            extratos = ExtratoBancario.objects.filter(id__in=e_ids).order_by('data_transacao')
+            notas = ContasReceber.objects.filter(id__in=n_ids).order_by('dt_vencto_atual')
 
             # 3. Cria um controle de saldo em memória para os depósitos selecionados
             extratos_saldo = []
@@ -474,45 +476,46 @@ def painel_conciliacao(request):
 
             notas_conciliadas_qtd = 0
 
-            # 4. ALGORITMO DE DISTRIBUIÇÃO
-            # Varre cada nota e vai "pagando" com os saldos dos depósitos disponíveis
+            # =========================================================
+            # 4. ALGORITMO DE DISTRIBUIÇÃO (NOVO E BLINDADO)
+            # =========================================================
             for nota in notas:
                 saldo_nota = nota.vl_liquido
                 
                 for ex_dict in extratos_saldo:
                     if saldo_nota <= Decimal('0.00'):
-                        break  # Esta nota já foi totalmente paga, vai para a próxima
+                        break  
                         
                     if ex_dict['saldo'] > Decimal('0.00'):
-                        # Pega o menor valor entre o que a nota precisa e o que o depósito tem
                         valor_a_usar = min(saldo_nota, ex_dict['saldo'])
                         
                         if valor_a_usar > 0:
-                            # Cria a relação (o Match) no banco de dados
                             ConciliacaoNota.objects.create(
                                 extrato=ex_dict['obj'], 
                                 nota=nota, 
                                 valor_pago=valor_a_usar
                             )
                             
-                            # Abate o valor usado da nota e do depósito atual
                             saldo_nota -= valor_a_usar
                             ex_dict['saldo'] -= valor_a_usar
                 
-                # Concluído o loop da nota, a marcamos como baixada
-                nota.status = 'CONCILIADO'
+                # BLINDAGEM: Só concilia a nota se o dinheiro dos depósitos cobriu ela 100%
+                if saldo_nota <= Decimal('0.01'): 
+                    nota.status = 'CONCILIADO'
+                    notas_conciliadas_qtd += 1
+                else:
+                    # Se faltou dinheiro, aborta a mudança e mantém em aberto
+                    nota.status = 'ABERTO' 
+                
                 nota.save()
-                notas_conciliadas_qtd += 1
 
             # 5. Fechamento dos Depósitos
-            # Varre os extratos que manipulamos para verificar se o saldo zerou
             for ex_dict in extratos_saldo:
                 ex = ex_dict['obj']
-                # Consulta direto no banco para garantia dupla
+                # Consulta direto no banco para garantir
                 total_usado = ConciliacaoNota.objects.filter(extrato=ex).aggregate(Sum('valor_pago'))['valor_pago__sum'] or Decimal('0.00')
                 diferenca = ex.valor - total_usado
                 
-                # Se usou tudo (margem de 1 centavo para arredondamento), baixa o depósito
                 if diferenca <= Decimal('0.01'): 
                     ex.status = 'CONCILIADO'
                 else:
@@ -522,10 +525,8 @@ def painel_conciliacao(request):
             if notas_conciliadas_qtd > 0:
                 messages.success(request, f"Sucesso! {notas_conciliadas_qtd} nota(s) conciliada(s) com os depósitos selecionados.")
             else:
-                messages.warning(request, "Nenhuma nota foi conciliada.")
+                messages.warning(request, "Nenhuma nota foi totalmente conciliada (saldo insuficiente).")
                 
-            # IMPORTANTE: Redireciona para o painel limpo (sem extrato_id na URL)
-            # Assim a tela recarrega do zero e tira os depósitos da barra lateral!
             return redirect(f"{request.path}?{query_filtros}")
 
         # --- AÇÃO 4: DESFAZER CONCILIAÇÃO ---
@@ -542,7 +543,6 @@ def painel_conciliacao(request):
             messages.success(request, "Conciliação desfeita! O depósito e as notas voltaram para a fila.")
             return redirect(f"{request.path}?extrato_id={extrato_id}{query_filtros}")
 
-        # --- AÇÃO 5: RODAR AUTOMAÇÃO (ROBÔ DE PRÉ-CONCILIAÇÃO) ---
         # --- AÇÃO 5: RODAR AUTOMAÇÃO (ROBÔ DE PRÉ-CONCILIAÇÃO) ---
         elif acao == 'rodar_automacao':
             extratos_para_analise = ExtratoBancario.objects.filter(status='PENDENTE', valor__gt=0)
@@ -712,8 +712,11 @@ def painel_conciliacao(request):
             relacoes = ConciliacaoNota.objects.filter(extrato=extrato_selecionado).select_related('nota')
             notas_conciliadas = [rel.nota for rel in relacoes]
 
+ # ... código anterior da view (lógicas de notas sugeridas, etc) ...
+
     email_salvo = ""
     dados_estabelecimentos = []
+    relacoes_vinculadas = [] # 1. NASCE AQUI, FORA DE QUALQUER 'IF' PARA NUNCA DAR ERRO!
 
     if extrato_selecionado and extrato_selecionado.cnpj_cpf:
         obj_email = ClienteEmail.objects.filter(cnpj_busca=extrato_selecionado.cnpj_cpf).first()
@@ -739,6 +742,11 @@ def painel_conciliacao(request):
                         'cnpj': item.cnpj
                     })
 
+    # 2. SE TIVER DEPÓSITO SELECIONADO, ELE PREENCHE A LISTA
+    if extrato_selecionado:
+        relacoes_vinculadas = ConciliacaoNota.objects.filter(extrato=extrato_selecionado).select_related('nota')
+
+    # 3. MONTA O CONTEXTO COM SEGURANÇA
     context = {
         'extratos_pendentes': extratos_pendentes,
         'extrato_selecionado': extrato_selecionado,
@@ -752,23 +760,30 @@ def painel_conciliacao(request):
         'dados_estabelecimentos': json.dumps(dados_estabelecimentos),
         'filtro_data': filtro_data,
         'notas_sugeridas_ids': notas_sugeridas_ids,
+        'relacoes_vinculadas': relacoes_vinculadas, # 4. ENTRA AQUI!
     }
-    return render(request, 'conciliacao/painel.html', context)
+    return render(request, 'conciliacao/painel.html', context)   
+
 # ==============================================================
 # 1. FUNÇÃO DE BAIXAR O LOTE COMPLETO (TELA GESTÃO CONCILIADOS)
 # ==============================================================
 @login_required
 def exportar_lote_datasul(request, extrato_id=None):
-    # A MÁGICA: Em vez de iterar sobre as relações, iteramos sobre as NOTAS ÚNICAS
+    # A MÁGICA: Em vez de usar JOIN direto que pode vazar duplicatas, 
+    # isolamos os IDs únicos das notas primeiro.
     if extrato_id:
+        notas_ids = ConciliacaoNota.objects.filter(
+            extrato_id=extrato_id, 
+            nota__status='CONCILIADO'
+        ).values_list('nota_id', flat=True)
+        
         notas = ContasReceber.objects.filter(
-            conciliacaonota__extrato_id=extrato_id, 
-            status='CONCILIADO'
-        ).distinct().order_by('dt_emissao_orig')
+            id__in=notas_ids
+        ).order_by('dt_emissao_orig')
     else:
         notas = ContasReceber.objects.filter(
             status='CONCILIADO'
-        ).distinct().order_by('dt_emissao_orig')
+        ).order_by('dt_emissao_orig')
     
     if not notas.exists():
         messages.warning(request, "Nenhuma nota pendente de exportação encontrada.")

@@ -6,6 +6,31 @@ document.addEventListener('DOMContentLoaded', function() {
     const fileInput = document.getElementById('compo-excel-input');
     const alertaCompo = document.getElementById('alerta-composicao');
     
+    // ==========================================
+    // 🔒 BLINDAGEM DO BOTÃO CONCILIAR
+    // Garante que TODOS os depósitos marcados no menu lateral 
+    // entrem na requisição POST silenciosamente.
+    // ==========================================
+    if (btnConciliar) {
+        btnConciliar.addEventListener('click', function(e) {
+            // Busca o form onde o botão está (ou procura o form principal da tela)
+            const form = this.closest('form') || document.querySelector('form');
+            if (form) {
+                // 1. Limpa lixos de requisições anteriores
+                form.querySelectorAll('input[name="extratos_selecionados"]').forEach(el => el.remove());
+                
+                // 2. Cria inputs escondidos para cada depósito ticado na barra lateral
+                document.querySelectorAll('.chk-extrato:checked').forEach(chk => {
+                    const hidden = document.createElement('input');
+                    hidden.type = 'hidden';
+                    hidden.name = 'extratos_selecionados';
+                    hidden.value = chk.value; 
+                    form.appendChild(hidden);
+                });
+            }
+        });
+    }
+
     // 1. Tornar as linhas clicáveis
     document.querySelectorAll('.linha-nota').forEach(tr => {
         tr.addEventListener('click', function(e) {
@@ -78,6 +103,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             }
 
+            // LIBERA O BOTÃO SE PELO MENOS 1 NOTA ESTIVER MARCADA
             if (btnConciliar) {
                 btnConciliar.disabled = (checkedCount === 0);
             }
@@ -109,7 +135,6 @@ document.addEventListener('DOMContentLoaded', function() {
         // Expõe a função para o arquivo inteiro poder usá-la
         window.forcarRecalculoDasNotas = atualizarSoma;
         
-
         // ==========================================
         // 3. PAINEL DE IMPOSTOS
         // ==========================================
@@ -184,19 +209,12 @@ document.addEventListener('DOMContentLoaded', function() {
             const difEl = document.getElementById('calc-diferenca');
             const excelAttr = painelImpostos.getAttribute('data-excel');
             
-            // =================================================================
-            // CORREÇÃO DO CÁLCULO DE VARIAÇÃO (MÉTODO EXCEL)
-            // =================================================================
-            // No Excel: =([Vlr. Pago]/[Vl.Bruto]) * 100 - 100
-            // 1. O Vlr. Pago por padrão é o valor do Depósito bancário
             let valorPagoCliente = valorDeposito; 
             
-            // 2. Mas se a nota veio de uma importação de Excel, usamos o valor do Excel
             if (excelAttr && parseFloat(excelAttr) > 0) {
                 valorPagoCliente = parseFloat(excelAttr);
             }
 
-            // 3. Aplica a fórmula exata
             let variacao = 0;
             if (bruto > 0) {
                 variacao = (valorPagoCliente / bruto) * 100 - 100;
@@ -224,18 +242,28 @@ document.addEventListener('DOMContentLoaded', function() {
                             }
                         }
                     });
-                    diferencaImposto = somaTotalSimulada - valorDeposito;
+                    
+                    // Ajuste: A diferença usa a soma de todos os depósitos selecionados
+                    let valorAlvoMultiplo = 0;
+                    const extratosMarcados = document.querySelectorAll('.chk-extrato:checked');
+                    if (extratosMarcados.length > 0) {
+                        extratosMarcados.forEach(chk => {
+                            const item = chk.closest('.extrato-item');
+                            valorAlvoMultiplo += parseFloat(item.getAttribute('data-valor').replace(',', '.')) || 0;
+                        });
+                    } else {
+                        valorAlvoMultiplo = valorDeposito;
+                    }
+                    
+                    diferencaImposto = somaTotalSimulada - valorAlvoMultiplo;
                 }
                 
                 difEl.innerText = diferencaImposto.toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'});
                 difEl.className = Math.abs(diferencaImposto) < 0.01 ? 'fw-bold text-success' : 'fw-bold text-danger';
             }
-        
         }
 
-        // Removemos o evento 'input' dos txt-inputs aqui, e passamos a usar o evento 'change' da calculadora mais abaixo.
         document.querySelectorAll('.tx-input').forEach(inp => {
-            // Alterado de 'input' para 'change' para não ficar recalculando sem parar com o readonly
             inp.addEventListener('change', calcularImpostosEmTempoReal); 
         });
 
@@ -458,111 +486,87 @@ document.addEventListener('DOMContentLoaded', function() {
                 .forEach(tr => tbody.appendChild(tr));
         });
     });
-// ==============================================================================
-// 7. MODAL CALCULADORA DE PORCENTAGEM (IMPOSTOS E DESCONTOS)
-// ==============================================================================
+
+    // ==============================================================================
+    // 7. MODAL CALCULADORA DE PORCENTAGEM (IMPOSTOS E DESCONTOS)
+    // ==============================================================================
     let inputAlvoOriginal = null;
     let valorBrutoAtual = 0;
     let resultadoCalculado = 0;
-    let calculoRealizado = false; // <-- NOVA FLAG: Sabe se o usuário clicou em calcular
+    let calculoRealizado = false;
 
-    // Inicializa o modal do Bootstrap (Verifica se ele existe na tela para não dar erro)
     const modalEl = document.getElementById('modalCalculadora');
     if (modalEl) {
         const modalCalculadora = new bootstrap.Modal(modalEl);
 
-        // Mapeia os elementos do modal
         const calcValorBrutoText = document.getElementById('calcValorBrutoText');
         const calcPercentual = document.getElementById('calcPercentual');
         const calcResultadoText = document.getElementById('calcResultadoText');
         const btnCalcular = document.getElementById('btnCalcularPercentual');
         const btnConfirmar = document.getElementById('btnConfirmarCalculo');
 
-        // ESCUTA O CLIQUE NOS CAMPOS DE IMPOSTO
         const inputsCalculaveis = document.querySelectorAll('.acionar-calculadora');
         
         inputsCalculaveis.forEach(input => {
             input.addEventListener('click', function() {
                 inputAlvoOriginal = this; 
-
-                // Pega o valor bruto DIRETAMENTE do campo oculto do painel
                 valorBrutoAtual = parseFloat(document.getElementById('ajuste-vl-bruto').value) || 0;
 
-                // Limpa o modal para uma nova conta
                 calcPercentual.value = '';
                 resultadoCalculado = 0;
-                calculoRealizado = false; // Reseta a flag ao abrir
+                calculoRealizado = false;
                 calcResultadoText.innerText = '0.00';
                 calcValorBrutoText.innerText = valorBrutoAtual.toLocaleString('pt-BR', {minimumFractionDigits: 2});
 
-                // Abre o modal
                 modalCalculadora.show();
             });
         });
 
-        // Coloca o cursor automaticamente no campo ao abrir
         modalEl.addEventListener('shown.bs.modal', () => {
             calcPercentual.focus();
         });
 
-        // Se o usuário voltar a digitar algo, apagamos a flag do cálculo
         if (calcPercentual) {
             calcPercentual.addEventListener('input', function() {
                 calculoRealizado = false; 
             });
         }
 
-        // AÇÃO DO BOTÃO "CALCULAR"
         if (btnCalcular) {
             btnCalcular.addEventListener('click', function() {
-                // Pega a porcentagem digitada
                 let valorDigitado = parseFloat(calcPercentual.value.replace(',', '.')) || 0;
-                
-                // Faz a conta como porcentagem
                 resultadoCalculado = (valorBrutoAtual * valorDigitado) / 100;
-                
-                // Mostra o resultado na legenda
                 calcResultadoText.innerText = resultadoCalculado.toFixed(2);
-                calculoRealizado = true; // Avisa o sistema que o cálculo de % foi feito!
+                calculoRealizado = true;
             });
         }
 
-        // AÇÃO DO BOTÃO "OK"
         if (btnConfirmar) {
             btnConfirmar.addEventListener('click', function() {
-                
-                // A MÁGICA ACONTECE AQUI:
-                // Se NÃO clicou em calcular, e tem um valor maior que zero digitado:
                 if (!calculoRealizado) {
                     let valorDigitado = parseFloat(calcPercentual.value.replace(',', '.')) || 0;
                     if (valorDigitado > 0) {
-                        // Assume o valor digitado diretamente em Reais (R$)
                         resultadoCalculado = valorDigitado; 
-                        // Atualiza a legenda interna para respeitar o fluxo (mesmo fechando rápido)
                         calcResultadoText.innerText = resultadoCalculado.toFixed(2); 
                     }
                 }
 
                 if(inputAlvoOriginal) {
-                    // Joga o valor (seja ele a porcentagem calculada ou o valor absoluto) de volta
                     inputAlvoOriginal.value = resultadoCalculado.toFixed(2);
-                    
-                    // Dispara o evento para salvar no banco
                     inputAlvoOriginal.dispatchEvent(new Event('change', { bubbles: true }));
                 }
                 
-                // Fecha o modal
                 modalCalculadora.hide();
             });
         }
     }
+
     // ==============================================================================
     // 8. DISPARO DE E-MAIL (OUTLOOK)
     // ==============================================================================
     const btnEnviarEmail = document.getElementById('btnEnviarEmailOutlook');
     if (btnEnviarEmail) {
         btnEnviarEmail.addEventListener('click', function() {
-            
             const inputEmailRaw = document.getElementById('inputEmailCliente') ? document.getElementById('inputEmailCliente').value.trim() : "";
             const cnpjBusca = document.getElementById('cnpjAtivoBusca') ? document.getElementById('cnpjAtivoBusca').value : "";
             
@@ -589,25 +593,19 @@ document.addEventListener('DOMContentLoaded', function() {
             const valorDep = document.getElementById('valorDepositoEmail') ? document.getElementById('valorDepositoEmail').value : "0,00";
             const dataDep = document.getElementById('dataDepositoEmail') ? document.getElementById('dataDepositoEmail').value : "";
             
-            // ================================================================
-            // NOVIDADE: EXTRAINDO NOME DO CLIENTE E RAIZ DO CNPJ
-            // ================================================================
             const nomeCliente = document.getElementById('nomeClienteEmail') ? document.getElementById('nomeClienteEmail').value.trim() : "Cliente";
             let raizCnpj = "";
             
             if (cnpjBusca) {
-                // Remove tudo que não for número (pontos, barras, traços)
                 const numerosCnpj = cnpjBusca.replace(/\D/g, ''); 
                 if (numerosCnpj.length >= 8) {
-                    // Pega os 8 primeiros dígitos e formata como XX.XXX.XXX
                     const r = numerosCnpj.substring(0, 8);
                     raizCnpj = `${r.substring(0,2)}.${r.substring(2,5)}.${r.substring(5,8)}`;
                 } else {
-                    raizCnpj = cnpjBusca; // Fallback caso venha algo estranho
+                    raizCnpj = cnpjBusca; 
                 }
             }
 
-            // 1. LÊ OS DADOS DO JSON (CNPJs e Estabs)
             let dadosEstabsStr = "[]";
             const tagDados = document.getElementById('dadosEstabsJson');
             if (tagDados) {
@@ -640,7 +638,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 codigoEstabParaValidar = document.getElementById('nomeEmpresaDeposito') ? document.getElementById('nomeEmpresaDeposito').value.trim() : "";
             }
 
-            // TRADUTOR DE CÓDIGO DA EMPRESA
             function obterNomeEmpresaPorEstab(estabStr) {
                 if (!estabStr || estabStr === "None") return "Grupo Protege";
                 const estab = String(estabStr).trim();
@@ -658,9 +655,6 @@ document.addEventListener('DOMContentLoaded', function() {
 
             const nomeEmpresaReal = obterNomeEmpresaPorEstab(codigoEstabParaValidar);
 
-            // ================================================================
-            // NOVO ASSUNTO COM CLIENTE E RAIZ
-            // ================================================================
             const assunto = `Composição de pagamentos - ${nomeEmpresaReal} - ${nomeCliente} - CNPJ Raiz: ${raizCnpj}`;
             
             let corpoEmail = `${saudacao},\n\n`;
@@ -686,71 +680,13 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             } catch(e) { }
         });
-/* ========================================================
-   MODAL DE REVISÃO DOS DEPÓSITOS VERDES (EM LOTE)
-======================================================== */
-        function abrirModalRevisaoVerdes(extratoId) {
-            // 1. Abre a janela e reseta o visual
-            var modalElement = document.getElementById('modalRevisaoVerdes');
-            if (!modalElement) return; // Trava de segurança
-            
-            var modal = new bootstrap.Modal(modalElement);
-            modal.show();
-            
-            document.getElementById('loading-revisao').classList.remove('d-none');
-            document.getElementById('conteudo-revisao').classList.add('d-none');
-            document.getElementById('btn-confirmar-verdes').disabled = true;
-            document.getElementById('alerta-divergencia').classList.add('d-none');
-
-            // Captura o token de segurança do Django direto de qualquer form da tela
-            var csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
-
-            // 2. Chama o backend (views.py) via AJAX para somar tudo
-            fetch(window.location.pathname, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-Requested-With': 'XMLHttpRequest',
-                    'X-CSRFToken': csrfToken
-                },
-                body: JSON.stringify({
-                    'acao': 'resumo_verdes_cnpj',
-                    'extrato_id': extratoId
-                })
-            })
-            .then(response => response.json())
-            .then(data => {
-                // Esconde o "Carregando..." e mostra o resultado
-                document.getElementById('loading-revisao').classList.add('d-none');
-                document.getElementById('conteudo-revisao').classList.remove('d-none');
-                
-                if(data.status === 'sucesso') {
-                    // Preenche os valores na tela
-                    document.getElementById('rev-qtd').textContent = data.qtd_depositos;
-                    document.getElementById('rev-soma-dep').textContent = 'R$ ' + parseFloat(data.total_depositos).toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2});
-                    document.getElementById('rev-soma-notas').textContent = 'R$ ' + parseFloat(data.total_notas).toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2});
-                    
-                    // 3. Trava de segurança: Diferença máxima tolerada de 0.05
-                    if (Math.abs(data.total_depositos - data.total_notas) <= 0.05) {
-                        document.getElementById('btn-confirmar-verdes').disabled = false; // Libera o botão
-                    } else {
-                        document.getElementById('alerta-divergencia').classList.remove('d-none'); // Exibe o alerta vermelho
-                    }
-                } else {
-                    alert('Erro ao buscar dados: ' + data.message);
-                    modal.hide();
-                }
-            })
-            .catch(error => {
-                alert('Erro de conexão ao calcular os totais.');
-                console.error(error);
-                modal.hide();
-            });
-        }
     }
 
-}); // <-- Fim do ÚNICO DOMContentLoaded
+}); // <-- Fim do PRIMEIRO DOMContentLoaded
 
+// ========================================================
+// CONTROLE DOS DEPÓSITOS MÚLTIPLOS (MENU LATERAL)
+// ========================================================
 document.addEventListener('DOMContentLoaded', function() {
     const chkExtratos = document.querySelectorAll('.chk-extrato');
     const botoesAgrupar = document.querySelectorAll('.btn-agrupar-cnpj');
@@ -758,7 +694,6 @@ document.addEventListener('DOMContentLoaded', function() {
     const displayTotal = document.getElementById('total-depositos-selecionados');
     const displayQtd = document.getElementById('qtd-depositos-selecionados');
 
-    // 1. Função que soma tudo o que está com o checkbox marcado
     function atualizarSomaDepositos() {
         let soma = 0.0;
         let qtd = 0;
@@ -766,14 +701,12 @@ document.addEventListener('DOMContentLoaded', function() {
         chkExtratos.forEach(chk => {
             if (chk.checked) {
                 const item = chk.closest('.extrato-item');
-                // O data-valor no HTML já entrega o valor limpo (ex: 1540.50), garantindo precisão
                 const valor = parseFloat(item.getAttribute('data-valor').replace(',', '.')) || 0;
                 soma += valor;
                 qtd++;
             }
         });
 
-        // Mostra ou esconde o painel baseado nas seleções
         if (qtd > 0) {
             painelResumo.classList.remove('d-none');
             displayTotal.textContent = soma.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -781,31 +714,27 @@ document.addEventListener('DOMContentLoaded', function() {
         } else {
             painelResumo.classList.add('d-none');
         }
-        // NOVO: Avisa o outro script para recalcular a "Diferença" das notas instantaneamente!
+        
+        // Força a atualização do botão e das cores da matemática principal
         if (window.forcarRecalculoDasNotas) window.forcarRecalculoDasNotas(null);
     }
 
-    // 2. Ouvinte para os cliques manuais nos checkboxes
     chkExtratos.forEach(chk => {
         chk.addEventListener('change', atualizarSomaDepositos);
     });
 
-  // 3. O super-poder: Agrupar por CNPJ (Agora no botão principal)
     const btnAgruparPrincipal = document.getElementById('btn-agrupar-cnpj-principal');
     
     if (btnAgruparPrincipal) {
         btnAgruparPrincipal.addEventListener('click', function(e) {
             e.preventDefault();
             
-            // Pega o CNPJ diretamente do data-attribute do botão que criamos
             const cnpjOrigem = this.getAttribute('data-cnpj');
             if (!cnpjOrigem) return;
 
-            // Regex que pega apenas números e corta os primeiros 8 dígitos (a Raiz)
             const raizCnpjOrigem = cnpjOrigem.replace(/\D/g, '').substring(0, 8);
             if (!raizCnpjOrigem) return;
 
-            // Varre a lista marcando ou desmarcando
             document.querySelectorAll('.extrato-item').forEach(item => {
                 const cnpjAlvo = (item.getAttribute('data-cnpj') || '').replace(/\D/g, '');
                 const chk = item.querySelector('.chk-extrato');
@@ -817,7 +746,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             });
 
-            atualizarSomaDepositos(); // Recalcula tudo e joga pra tela
+            atualizarSomaDepositos(); 
         });
     }
-});
+}); // <-- Fim do SEGUNDO DOMContentLoaded
