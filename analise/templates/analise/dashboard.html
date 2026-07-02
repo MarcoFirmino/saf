@@ -8,13 +8,29 @@
 {% endblock %}
 
 {% block content %}
-<div id="wrapper">
+<div id="wrapper" class="d-flex">
     {% include 'includes/sidebar.html' %} 
 
-    <div id="content">
+    <div id="content" class="w-100">
+        
         <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-2 pb-2 mb-3 border-bottom">
-            <h2 class="h4 fw-bold text-dark mb-0">Resumo de Inadimplência</h2>
-            <div class="btn-toolbar mb-2 mb-md-0">
+            <div class="d-flex align-items-center">
+                <button id="btn-toggle-menu-dash" class="btn btn-sm btn-outline-secondary bg-white border-0 shadow-sm fw-bold px-3 me-3">
+                    <i class="bi bi-arrows-expand" id="icone-btn-menu-dash"></i> <span id="texto-btn-menu-dash">Ocultar Menu</span>
+                </button>
+                <h2 class="h4 fw-bold text-dark  mb-0">Resumo de Inadimplência</h2>
+            </div>
+            
+            
+            <div class="btn-toolbar  mb-2 mb-md-0">
+
+                <button type="button" class="btn btn-sm btn-danger px-1 shadow-sm me-2 fw-bold" data-bs-toggle="modal" data-bs-target="#modalExcluirData">
+                    <i class="bi bi-trash"></i> Excluir Lote
+                </button>
+                <button type="button" class="btn btn-sm btn-success shadow-sm me-2 fw-bold" data-bs-toggle="modal" data-bs-target="#modalNovoResumo">
+                    <i class="bi bi-plus-circle"></i> Novo Registro
+                </button>
+                
                 <a href="/admin/analise/resumoinadimplencia/importar-matriz/" class="btn btn-sm btn-outline-primary me-2 shadow-sm">
                     <i class="bi bi-file-earmark-excel"></i> Importar Matriz
                 </a>
@@ -90,4 +106,81 @@
         </div>
     </div>
 </div>
+<div class="modal fade" id="modalNovoResumo" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title fw-bold"><i class="bi bi-plus-circle"></i> Lançar Resumo de Inadimplência</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="POST" action="">
+                {% csrf_token %}
+                <input type="hidden" name="acao" value="salvar_resumo">
+                
+                <div class="modal-body bg-light">
+                    <div class="mb-3">
+                        <label class="form-label fw-bold small text-muted">Data de Referência *</label>
+                        <input type="date" name="data" class="form-control" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold small text-muted">Segmento / Métrica *</label>
+                        <input type="text" name="seguimento" class="form-control" placeholder="Ex: Inadimplência Bruta" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold small text-muted">Valor (R$) *</label>
+                        <input type="number" step="0.01" name="valor" class="form-control" placeholder="Ex: 150000.50" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold small text-muted">Tipo de Relatório</label>
+                        <select name="tipo_relatorio" class="form-select">
+                            <option value="Resumo" selected>Resumo</option>
+                            <option value="Geral">Geral</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-success fw-bold"><i class="bi bi-save"></i> Salvar Registro</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+<div class="modal fade" id="modalExcluirData" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title fw-bold"><i class="bi bi-exclamation-triangle"></i> Excluir Lançamentos por Data</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="POST" action="">
+                {% csrf_token %}
+                <input type="hidden" name="acao" value="excluir_data">
+                
+                <div class="modal-body bg-light">
+                    <p class="text-danger small fw-bold mb-3">
+                        Cuidado! Esta ação excluirá permanentemente todos os registros do Resumo de Inadimplência vinculados à data selecionada. Não é possível desfazer.
+                    </p>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold small text-muted">Selecione a Data para exclusão</label>
+                        <select name="data_exclusao" class="form-select" required>
+                            <option value="">Selecione a data...</option>
+                            {% for data in datas %}
+                                <option value="{{ data|date:'Y-m-d' }}">{{ data|date:"d/m/Y" }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-danger fw-bold" onclick="return confirm('ATENÇÃO: Confirma a exclusão de TODOS os dados lançados nesta data?');">
+                        <i class="bi bi-trash"></i> Confirmar Exclusão
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script src="{% static 'js/dashboard.js' %}"></script>
 {% endblock %}

@@ -1,7 +1,7 @@
 
 import pandas as pd
 import numpy as np
-from django.core.paginator import Paginator
+from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
 from django.http import JsonResponse
 from django.views.decorators.http import require_POST
 import json
@@ -33,7 +33,8 @@ from .models import (
     BaseHistoricaRelatorio,
     CreditoNaoDestinado, 
     HistoricoAbatimento, 
-    HistoricoContato
+    HistoricoContato,
+    ResumoInadimplencia
 )
 
 
@@ -603,10 +604,6 @@ def importar_bd_clientes_view(request):
             
     return render(request, 'analise/importar_bd_clientes.html')
 
-# ==============================================================================
-# LIMPEZA
-# ==============================================================================
-
 @login_required
 def limpar_bd_clientes(request):
     try:
@@ -785,7 +782,70 @@ def dashboard_inadimplencia(request):
 
 @login_required
 def dashboard_resumo(request):
-    # 1. Busca os dados
+   
+    # ==============================================================
+    # 1. INTERCEPTADOR DE FORMULÁRIOS (AÇÕES DA TELA)
+    # ==============================================================
+    if request.method == 'POST':
+        acao = request.POST.get('acao')
+        
+        # --- AÇÃO 1: SALVAR OU ATUALIZAR RESUMO ---
+        if acao == 'salvar_resumo':
+            data = request.POST.get('data')
+            seguimento = request.POST.get('seguimento')
+            valor_raw = request.POST.get('valor', '0')
+            tipo_relatorio = request.POST.get('tipo_relatorio', 'GERAL')
+            
+            try:
+                # 1. Correção: Substitui vírgula por ponto, mas não apaga o ponto original!
+                v_str = str(valor_raw).replace(',', '.')
+                valor_decimal = Decimal(v_str) if v_str else Decimal('0.00')
+                
+                # 2. Salva ou Atualiza no banco
+                registro, criado = ResumoInadimplencia.objects.update_or_create(
+                    seguimento=seguimento,
+                    data=data,
+                    tipo_relatorio=tipo_relatorio,
+                    defaults={'valor': valor_decimal}
+                )
+                
+                if criado:
+                    messages.success(request, f"Novo registro '{seguimento}' criado com sucesso!")
+                else:
+                    messages.info(request, f"Registro '{seguimento}' atualizado para R$ {valor_decimal}.")
+                
+            except Exception as e:
+                print(f"ERRO FATAL AO SALVAR: {str(e)}")
+                messages.error(request, f"Erro ao gravar no banco: {str(e)}")
+                
+            return redirect(request.path)
+
+        # --- AÇÃO 2: EXCLUIR TODOS OS REGISTROS DE UMA DATA ---
+        elif acao == 'excluir_data':
+            data_exclusao = request.POST.get('data_exclusao')
+            
+            if data_exclusao:
+                try:
+                    # Deleta todos os registros que baterem com a data enviada (Bulk Delete)
+                    qtd_deletados, detalhes = ResumoInadimplencia.objects.filter(data=data_exclusao).delete()
+                    
+                    if qtd_deletados > 0:
+                        # Pega o formato AAAA-MM-DD que veio do HTML e inverte para o padrão BR (DD/MM/AAAA)
+                        data_br = f"{data_exclusao[8:10]}/{data_exclusao[5:7]}/{data_exclusao[0:4]}"
+                        messages.success(request, f"🚀 Sucesso! Lote limpo. {qtd_deletados} registros do dia {data_br} foram excluídos permanentemente.")
+                    else:
+                        messages.warning(request, "Nenhum registro encontrado para exclusão na data selecionada.")
+                
+                except Exception as e:
+                    print(f"ERRO AO TENTAR EXCLUIR: {str(e)}")
+                    messages.error(request, f"Erro ao tentar excluir os dados: {str(e)}")
+            else:
+                messages.warning(request, "Operação cancelada: Nenhuma data foi selecionada.")
+                
+            return redirect(request.path)
+        
+     # 1. Busca os dados 
+        
     qs = ResumoInadimplencia.objects.filter(tipo_relatorio='Resumo').values()
     
     if not qs:
@@ -856,70 +916,6 @@ def dashboard_resumo(request):
     # =========================================================
 
 @login_required
-def aging_view(request):
-    # 1. Captura os IDs do formulário de filtro (GET)
-    data_atual_id = request.GET.get('data_atual')
-    data_base_id = request.GET.get('data_base')
-
-    # 2. Busca todo o histórico para as linhas superiores da tabela
-    historico = DevedorAging.objects.all().order_by('data_base')
-    
-    # Lista para os selects do filtro (mais recentes primeiro)
-    registros_dropdown = historico.order_by('-data_base')
-
-    # 3. Define quais registros usar para o cálculo da variação
-    obj_atual = None
-    obj_base = None
-
-    if data_atual_id and data_base_id:
-        obj_atual = DevedorAging.objects.filter(id=data_atual_id).first()
-        obj_base = DevedorAging.objects.filter(id=data_base_id).first()
-    else:
-        # Fallback: Se não houver filtro, compara os dois últimos do histórico
-        if historico.count() >= 2:
-            obj_atual = historico.last()
-            obj_base = historico[historico.count() - 2]
-
-    # 4. Preparação dos cálculos de Variação
-    variacao_reais = []
-    variacao_percentual = []
-    
-    # Mapeamento exato das colunas do seu Model DevedorAging
-    campos = [
-        'ate_30_dias', 'de_31_a_60_dias', 'de_61_a_90_dias', 
-        'de_91_a_120_dias', 'de_121_a_150_dias', 'de_151_a_180_dias', 
-        'mais_de_180_dias', 'total'
-    ]
-
-    if obj_atual and obj_base:
-        for campo in campos:
-            # Forçamos Decimal para evitar o erro de precisão (.37999999)
-            v_atual = Decimal(str(getattr(obj_atual, campo) or 0))
-            v_base = Decimal(str(getattr(obj_base, campo) or 0))
-            
-            # Cálculo Variação R$ (2 casas decimais)
-            diff_rs = (v_atual - v_base).quantize(Decimal("0.00"), rounding=ROUND_HALF_UP)
-            variacao_reais.append(diff_rs)
-            
-            # Cálculo Variação % (1 casa decimal)
-            if v_base != 0:
-                diff_pct = ((v_atual - v_base) / abs(v_base)) * 100
-                variacao_percentual.append(diff_pct.quantize(Decimal("0.1"), rounding=ROUND_HALF_UP))
-            else:
-                variacao_percentual.append(Decimal("0.0"))
-
-    context = {
-        'historico': historico,
-        'registros_dropdown': registros_dropdown,
-        'obj_atual': obj_atual,
-        'obj_base': obj_base,
-        'var_reais': variacao_reais,
-        'var_pct': variacao_percentual,
-        'segmento_ativo': 'aging'
-    }
-    return render(request, 'analise/aging.html', context)
-
-@login_required
 def renegociacoes_view(request):
     ultima_data = BaseHistoricaRelatorio.objects.filter(aba_origem='Renegociados').aggregate(Max('data_geracao'))['data_geracao__max']
     
@@ -944,8 +940,7 @@ def renegociacoes_view(request):
     lista_negocio = opcoes_base.exclude(negocio__isnull=True).exclude(negocio='').values_list('negocio', flat=True).distinct().order_by('negocio')
     
     # ==========================================
-    # NOVO: CÁLCULO PARA OS CARDS DO TOPO
-    # (Calcula com base na tabela filtrada)
+    # CÁLCULO PARA OS CARDS DO TOPO
     # ==========================================
     total_quebra = qs.filter(status='QUEBRA DE ACORDO / NÃO PAGAS').aggregate(Sum('vl_liquido'))['vl_liquido__sum'] or 0
     total_vencer = qs.filter(status='RENEGOCIAÇÕES A VENCER').aggregate(Sum('vl_liquido'))['vl_liquido__sum'] or 0
@@ -978,9 +973,22 @@ def renegociacoes_view(request):
             'total': row['Total']
         })
         
+    # ==========================================
+    # LÓGICA DE PAGINAÇÃO (50 LINHAS POR PÁGINA)
+    # ==========================================
+    paginator = Paginator(linhas, 50) # 50 linhas por página
+    page_number = request.GET.get('page', 1)
+    
+    try:
+        linhas_paginadas = paginator.page(page_number)
+    except PageNotAnInteger:
+        linhas_paginadas = paginator.page(1)
+    except EmptyPage:
+        linhas_paginadas = paginator.page(paginator.num_pages)
+        
     context = {
         'anos': anos_colunas,
-        'linhas': linhas,
+        'linhas': linhas_paginadas, # Enviamos a versão paginada para o HTML
         'totais_rodape': [totais_colunas[ano] for ano in anos_colunas],
         'total_geral': totais_colunas['Total'],
         'lista_status': lista_status,
@@ -999,9 +1007,87 @@ def renegociacoes_view(request):
     }
     
     return render(request, 'analise/renegociados.html', context)
-    # ==========================================
-    # Aging jurídico
-    # ==========================================
+
+@login_required
+def aging_view(request):
+    # ==============================================================
+    # 1. INTERCEPTADOR DE FORMULÁRIOS (POST - EXCLUSÃO)
+    # ==============================================================
+    if request.method == 'POST':
+        acao = request.POST.get('acao')
+        
+        if acao == 'excluir_aging':
+            registro_id = request.POST.get('registro_id')
+            if registro_id:
+                try:
+                    registro = DevedorAging.objects.get(id=registro_id)
+                    data_str = registro.data_base.strftime("%d/%m/%Y")
+                    registro.delete()
+                    messages.success(request, f"Registro da base {data_str} excluído com sucesso!")
+                except DevedorAging.DoesNotExist:
+                    messages.error(request, "Registro não encontrado para exclusão.")
+                except Exception as e:
+                    messages.error(request, f"Erro ao tentar excluir: {str(e)}")
+            else:
+                messages.warning(request, "Nenhum registro selecionado.")
+                
+            return redirect(request.path)
+
+    # ==============================================================
+    # 2. LÓGICA DE CARREGAMENTO (GET - TABELA E CÁLCULOS)
+    # ==============================================================
+    historico = DevedorAging.objects.all().order_by('data_base')
+    registros_dropdown = historico.order_by('-data_base') # Para o Modal
+
+    obj_atual = None
+    obj_base = None
+
+    # Compara sempre os dois últimos registros do histórico automaticamente
+    if historico.exists():
+        obj_atual = historico.last() # Pega a carga mais recente
+        
+        # Volta a data atual para o dia 1º do mesmo mês
+        primeiro_dia_mes_atual = obj_atual.data_base.replace(day=1)
+        
+        # Pega o ÚLTIMO registro do banco cuja data seja menor que o dia 1º
+        # Ou seja, pega automaticamente o último dia salvo do mês anterior!
+        obj_base = historico.filter(data_base__lt=primeiro_dia_mes_atual).last()
+
+    variacao_reais = []
+    variacao_percentual = []
+    
+    campos = [
+        'ate_30_dias', 'de_31_a_60_dias', 'de_61_a_90_dias', 
+        'de_91_a_120_dias', 'de_121_a_150_dias', 'de_151_a_180_dias', 
+        'mais_de_180_dias', 'total'
+    ]
+
+    if obj_atual and obj_base:
+        for campo in campos:
+            v_atual = Decimal(str(getattr(obj_atual, campo) or 0))
+            v_base = Decimal(str(getattr(obj_base, campo) or 0))
+            
+            # Cálculo Variação R$
+            diff_rs = (v_atual - v_base).quantize(Decimal("0.00"), rounding=ROUND_HALF_UP)
+            variacao_reais.append(diff_rs)
+            
+            # Cálculo Variação %
+            if v_base != 0:
+                diff_pct = ((v_atual - v_base) / abs(v_base)) * 100
+                variacao_percentual.append(diff_pct.quantize(Decimal("0.1"), rounding=ROUND_HALF_UP))
+            else:
+                variacao_percentual.append(Decimal("0.0"))
+
+    context = {
+        'historico': historico,
+        'registros_dropdown': registros_dropdown,
+        'obj_atual': obj_atual,
+        'obj_base': obj_base,
+        'var_reais': variacao_reais,
+        'var_pct': variacao_percentual,
+        'segmento_ativo': 'aging'
+    }
+    return render(request, 'analise/aging.html', context)
 
 @login_required
 def aging_juridico_view(request):

@@ -16,9 +16,7 @@ from django.db import IntegrityError
 from django.db.models import Q, Sum
 from analise.models import BaseGeral 
 from .models import ExtratoBancario, MapeamentoDePara, ConciliacaoNota, ExcecaoConciliacao, ClienteEmail, EstabelecimentoCNPJ, SugestaoAutomacao
-# 2. Models financeiros e bases de dados que pertencem ao app 'analise'
 from analise.models import ContasReceber, CreditoNaoDestinado
-# --- IMPORTANDO O SERVIÇO DO APP ANALISE ---
 from analise.services import converter_moeda_br
 # ==========================================
 # 1. IMPORTAÇÃO DOS EXTRATOS (PANDAS)
@@ -763,7 +761,6 @@ def painel_conciliacao(request):
         'relacoes_vinculadas': relacoes_vinculadas, # 4. ENTRA AQUI!
     }
     return render(request, 'conciliacao/painel.html', context)   
-
 # ==============================================================
 # 1. FUNÇÃO DE BAIXAR O LOTE COMPLETO (TELA GESTÃO CONCILIADOS)
 # ==============================================================

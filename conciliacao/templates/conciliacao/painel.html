@@ -146,33 +146,58 @@
                                         <div class="hstack gap-3">
                                             <button type="submit" name="acao" value="vincular_cnpj" class="btn btn-primary">Buscar</button>
                                             
-                                            <button type="button" class="btn btn-success fw-bold" onclick="abrirModalRevisaoVerdes('{{ extrato_selecionado.id }}')" title="Revisar e conciliar todos os verdes deste CNPJ">
-                                                    <i class="bi bi-check-all"></i> Efetivar Verdes
+                                            <button type="button" class="btn btn-success fw-bold" onclick="abrirModalRevisaoVerdes('{{ extrato_selecionado.id }}')" title="Agrupar deposítos com mesmo CNPJ">
+                                                    <i class="bi bi-check-all"></i> Agrupar
                                             </button>
                                         </div>
                                     </div>
                                 </form>
 
-                                <form id="form-upload-compo" enctype="multipart/form-data" class="m-0 text-end">
-                                    {% csrf_token %}
-                                    <input type="hidden" name="extrato_id" value="{{ extrato_selecionado.id }}">
-                                    <label for="compo-excel-input" class="btn btn-outline-success btn-sm shadow-sm m-0 w-100 fw-bold" style="cursor: pointer;">
-                                        <i class="bi bi-file-earmark-spreadsheet"></i> Importar Composição (Excel)
-                                    </label>
-                                    <input type="file" id="compo-excel-input" name="compo_excel" accept=".xlsx, .xls" style="display: none;">
-                                </form>
+                                <!-- Botões de Ação em Grid 2x2 -->
+                                <div class="row g-2 mt-2">
+                                    <!-- Botão 1: Importar -->
+                                    <div class="col-6">
+                                        <form id="form-upload-compo" enctype="multipart/form-data" class="m-0">
+                                            {% csrf_token %}
+                                            <input type="hidden" name="extrato_id" value="{{ extrato_selecionado.id }}">
+                                            <label for="compo-excel-input" class="btn btn btn-primary btn-sm w-100 shadow-sm fw-bold" style="--bs-btn-padding-y: .25rem; --bs-btn-padding-x: .5rem; --bs-btn-font-size: 2rem;"
+                                                   style="cursor: pointer;" data-bs-toggle="tooltip" title="Importar Composição (Excel)">
+                                                <i class="bi bi-file-earmark-spreadsheet"></i>
+                                            </label>
+                                            <input type="file" id="compo-excel-input" name="compo_excel" accept=".xlsx, .xls" style="display: none;">
+                                        </form>
+                                    </div>
 
-                                <button type="button" class="btn btn-warning btn-sm shadow-sm mt-2 w-100 fw-bold" data-bs-toggle="modal" data-bs-target="#modalGerarCredito">
-                                    <i class="bi bi-box-arrow-right"></i> Gerar Crédito (Exceção / PDD)
-                                </button>
-                                <button type="button" class="btn btn-info btn-sm shadow-sm mt-2 w-100 fw-bold text-white" data-bs-toggle="modal" data-bs-target="#modalEmailCliente">
-                                    <i class="bi bi-envelope-at"></i> Solicitar Composição (E-mail)
-                                </button>
-                                {% if extrato_selecionado.cnpj_cpf %}
-                                <button type="button" id="btn-agrupar-cnpj-principal" class="btn btn-outline-info btn-sm shadow-sm mt-2 w-100 fw-bold" data-cnpj="{{ extrato_selecionado.cnpj_cpf }}">
-                                    <i class="bi bi-funnel"></i> Agrupar Depósitos (Mesmo CNPJ)
-                                </button>
-                                {% endif %}
+                                    <!-- Botão 2: Gerar Crédito -->
+                                    <div class="col-6">
+                                        <button type="button" class="btn btn-warning btn-sm w-100 shadow-sm fw-bold" style="--bs-btn-padding-y: .25rem; --bs-btn-padding-x: .5rem; --bs-btn-font-size: 2rem;"
+                                                data-bs-toggle="modal" data-bs-target="#modalGerarCredito" data-bs-toggle="tooltip" title="Gerar Crédito (Exceção / PDD)">
+                                            <i class="bi bi-box-arrow-right"></i>
+                                        </button>
+                                    </div>
+
+                                    <!-- Botão 3: Solicitar Composição -->
+                                    <div class="col-6">
+                                        <button type="button" class="btn btn btn-info btn-sm w-100 shadow-sm fw-bold text-white" style="--bs-btn-padding-y: .25rem; --bs-btn-padding-x: .5rem; --bs-btn-font-size: 2rem;"
+                                                data-bs-toggle="modal" data-bs-target="#modalEmailCliente" data-bs-toggle="tooltip" title="Solicitar Composição (E-mail)">
+                                            <i class="bi bi-envelope-at"></i>
+                                        </button>
+                                    </div>
+
+                                    <!-- Botão 4: Agrupar Depósitos -->
+                                    <div class="col-6">
+                                        {% if extrato_selecionado.cnpj_cpf %}
+                                        <button type="button" id="btn-agrupar-cnpj-principal" class="btn btn-secondary btn-sm w-100 shadow-sm fw-bold" style="--bs-btn-padding-y: .25rem; --bs-btn-padding-x: .5rem; --bs-btn-font-size: 2rem;"
+                                                data-cnpj="{{ extrato_selecionado.cnpj_cpf }}" data-bs-toggle="tooltip" title="Agrupar Depósitos (Mesmo CNPJ)">
+                                            <i class="bi bi-funnel"></i>
+                                        </button>
+                                        {% else %}
+                                        <button type="button" class="btn btn-outline-secondary btn-sm w-100 shadow-sm fw-bold" disabled data-bs-toggle="tooltip" title="CNPJ não vinculado">
+                                            <i class="bi bi-funnel"></i>
+                                        </button>
+                                        {% endif %}
+                                    </div>
+                                </div>
                             </div>
                         </div>
 

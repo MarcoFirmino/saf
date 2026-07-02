@@ -134,7 +134,53 @@
                 </table>
             {% endif %}
         </div>
-    </div>
-</div>
-{% endblock %}
+        {% if linhas.has_other_pages %}
+                <nav aria-label="Navegação da Tabela de Renegociados" class="mt-4 d-flex justify-content-center">
+                    <ul class="pagination pagination-sm shadow-sm">
+                        {% if linhas.has_previous %}
+                            <li class="page-item">
+                                <a class="page-link text-primary" href="?page={{ linhas.previous_page_number }}{% if f_status %}&status={{ f_status }}{% endif %}{% if f_pacote %}&pacote={{ f_pacote }}{% endif %}{% if f_negocio %}&negocio={{ f_negocio }}{% endif %}">
+                                    <i class="bi bi-chevron-left"></i> Anterior
+                                </a>
+                            </li>
+                        {% else %}
+                            <li class="page-item disabled">
+                                <span class="page-link"><i class=\"bi bi-chevron-left\"></i> Anterior</span>
+                            </li>
+                        {% endif %}
+
+                        {% for i in linhas.paginator.page_range %}
+                            {% if linhas.number == i %}
+                                <li class="page-item active" aria-current="page">
+                                    <span class="page-link bg-primary border-primary">{{ i }}</span>
+                                </li>
+                            {% elif i > linhas.number|add:'-3' and i < linhas.number|add:'3' %}
+                                <li class="page-item">
+                                    <a class="page-link text-primary" href="?page={{ i }}{% if f_status %}&status={{ f_status }}{% endif %}{% if f_pacote %}&pacote={{ f_pacote }}{% endif %}{% if f_negocio %}&negocio={{ f_negocio }}{% endif %}">
+                                        {{ i }}
+                                    </a>
+                                </li>
+                            {% endif %}
+                        {% endfor %}
+
+                        {% if linhas.has_next %}
+                            <li class="page-item">
+                                <a class="page-link text-primary" href="?page={{ linhas.next_page_number }}{% if f_status %}&status={{ f_status }}{% endif %}{% if f_pacote %}&pacote={{ f_pacote }}{% endif %}{% if f_negocio %}&negocio={{ f_negocio }}{% endif %}">
+                                    Próxima <i class="bi bi-chevron-right"></i>
+                                </a>
+                            </li>
+                        {% else %}
+                            <li class="page-item disabled">
+                                <span class="page-link">Próxima <i class="bi bi-chevron-right"></i></span>
+                            </li>
+                        {% endif %}
+                    </ul>
+                </nav>
+                <div class="text-center mt-2 small text-muted">
+                    Mostrando página {{ linhas.number }} de {{ linhas.paginator.num_pages }} (Total: {{ linhas.paginator.count }} registros)
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        {% endblock %}
 

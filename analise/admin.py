@@ -127,7 +127,7 @@ class ResumoInadimplenciaResource(resources.ModelResource):
 class ResumoInadimplenciaAdmin(ImportExportModelAdmin):
     resource_class = ResumoInadimplenciaResource
     list_display = ('data', 'seguimento', 'valor', 'tipo_relatorio')
-    list_filter = ('data', 'tipo_relatorio')
+    list_filter = ('data', 'tipo_relatorio', 'seguimento')
     search_fields = ('seguimento',)
     change_list_template = "admin/resumo_change_list.html"
 

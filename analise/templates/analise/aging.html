@@ -5,7 +5,6 @@
 {% block title %}Aging de Devedores | Protege{% endblock %}
 
 {% block extra_css %}
-    <!-- Importação limpa do CSS externo -->
     <link rel="stylesheet" href="{% static 'analise/style.css' %}">
 {% endblock %}
 
@@ -14,48 +13,27 @@
     {% include 'includes/sidebar.html' %} 
 
     <div id="content" class="p-4">
-        <!-- Cabeçalho -->
-        <div class="d-flex justify-content-between align-items-center mb-4">
-            <h2 class="h3 fw-bold text-dark mb-0">Relatório de Aging</h2>
-            <a href="/admin/analise/devedoraging/import/" class="btn btn-outline-primary btn-sm">
-                <i class="bi bi-file-earmark-excel"></i> Importar Aging
-            </a>
-        </div>
+        
+        {% if messages %}
+            <div class="mb-3">
+                {% for message in messages %}
+                    <div class="alert alert-{% if message.tags == 'error' %}danger{% else %}{{ message.tags }}{% endif %} alert-dismissible fade show shadow-sm" role="alert">
+                        {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    </div>
+                {% endfor %}
+            </div>
+        {% endif %}
 
-        <!-- Filtros de Comparação -->
-        <div class="card border-0 shadow-sm mb-4">
-            <div class="card-body">
-                <form method="GET" class="row g-3 align-items-end">
-                    <div class="col-auto">
-                        <label class="form-label fw-bold text-muted small">Mês de Análise:</label>
-                        <select name="data_atual" class="form-select form-select-custom">
-                            {% for reg in registros_dropdown %}
-                                <option value="{{ reg.id }}" {% if obj_atual.id == reg.id %}selected{% endif %}>
-                                    {{ reg.data_base|date:"d/m/Y" }}
-                                </option>
-                            {% endfor %}
-                        </select>
-                    </div>
-                    <div class="col-auto">
-                        <label class="form-label fw-bold text-muted small">Comparar com (Base):</label>
-                        <select name="data_base" class="form-select form-select-custom">
-                            {% for reg in registros_dropdown %}
-                                <option value="{{ reg.id }}" {% if obj_base.id == reg.id %}selected{% endif %}>
-                                    {{ reg.data_base|date:"d/m/Y" }}
-                                </option>
-                            {% endfor %}
-                        </select>
-                    </div>
-                    <div class="col-auto">
-                        <button type="submit" class="btn btn-primary px-4 fw-bold">
-                            Atualizar Dashboard
-                        </button>
-                    </div>
-                </form>
+        <div class="d-flex justify-content-between align-items-center mb-4 border-bottom pb-3">
+            <h2 class="h3 fw-bold text-dark mb-0">Relatório de Aging</h2>
+            <div class="btn-toolbar">
+                <button type="button" class="btn btn-danger btn-sm shadow-sm fw-bold" data-bs-toggle="modal" data-bs-target="#modalExcluirAging">
+                    <i class="bi bi-trash"></i> Excluir Registro
+                </button>
             </div>
         </div>
 
-        <!-- Tabela de Aging -->
         <div class="table-responsive shadow-sm rounded-3">
             <table class="table table-hover mb-0 bg-white table-aging">
                 <thead class="text-center">
@@ -72,7 +50,6 @@
                     </tr>
                 </thead>
                 <tbody class="text-center">
-                    <!-- Histórico do Banco -->
                     {% for reg in historico %}
                     <tr>
                         <td class="text-start ps-4 fw-bold text-secondary">
@@ -89,9 +66,9 @@
                     </tr>
                     {% endfor %}
 
-                    <!-- Linha Variação % -->
+                    {% if obj_atual and obj_base %}
                     <tr class="row-variacao">
-                        <td class="text-start ps-4 fw-bold">Variação % - Mês</td>
+                        <td class="text-start ps-4 fw-bold">Variação % - Último Mês</td>
                         {% for v in var_pct %}
                         <td class="{% if v < 0 %}text-negativo{% else %}text-positivo{% endif %}">
                             {{ v|floatformat:1 }}%
@@ -99,17 +76,53 @@
                         {% endfor %}
                     </tr>
 
-                    <!-- Linha Variação R$ -->
                     <tr class="border-0">
-                        <td class="text-start ps-4 fw-bold">Variação R$ - Mês</td>
+                        <td class="text-start ps-4 fw-bold">Variação R$ - Último Mês</td>
                         {% for v in var_reais %}
                         <td class="{% if v < 0 %}text-negativo{% else %}text-positivo{% endif %}">
                             {{ v|intcomma }}
                         </td>
                         {% endfor %}
                     </tr>
+                    {% endif %}
                 </tbody>
             </table>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="modalExcluirAging" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title fw-bold"><i class="bi bi-trash"></i> Excluir Linha de Aging</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="POST" action="">
+                {% csrf_token %}
+                <input type="hidden" name="acao" value="excluir_aging">
+                
+                <div class="modal-body bg-light">
+                    <p class="text-danger small fw-bold mb-3">
+                        Atenção: A exclusão deste registro removerá a linha da tabela definitivamente e atualizará os cálculos.
+                    </p>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold small text-muted">Selecione a Base (Data)</label>
+                        <select name="registro_id" class="form-select" required>
+                            <option value="">Selecione a data...</option>
+                            {% for reg in registros_dropdown %}
+                                <option value="{{ reg.id }}">Base-{{ reg.data_base|date:"d/m/Y" }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-danger fw-bold" onclick="return confirm('Confirma a exclusão permanente deste registro de Aging?');">
+                        Confirmar Exclusão
+                    </button>
+                </div>
+            </form>
         </div>
     </div>
 </div>
